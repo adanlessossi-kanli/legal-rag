@@ -6,17 +6,20 @@ Use React `useState`/`useReducer` — no external state library for v1.
 ### Chat State
 ```tsx
 interface ChatState {
-  messages: { role: "user" | "assistant"; content: string; sources?: Source[] }[];
+  messages: Message[];
+  conversationId: string | null;
   isLoading: boolean;
   error: string | null;
 }
 ```
 - Managed in Chat page via `useReducer`.
-- Actions: `ADD_USER_MESSAGE`, `ADD_ASSISTANT_MESSAGE`, `SET_LOADING`, `SET_ERROR`.
+- Actions: `LOAD`, `ADD_USER_MESSAGE`, `START_ASSISTANT`, `APPEND_TOKEN`, `SET_SOURCES`, `SET_CONVERSATION_ID`, `FINISH_ASSISTANT`, `SET_ERROR`, `CLEAR`.
+- Error messages use `useTranslations("chat")` for translated fallbacks.
 
 ### Documents State
 - Fetched on mount via `GET /api/documents`.
-- Refetched after upload or delete.
+- Optimistic delete: removes from list immediately, reverts on error.
+- Error messages use `useTranslations("documents")` for translated fallbacks.
 
 ## API Client (`lib/api.ts`)
 

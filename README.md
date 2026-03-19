@@ -395,8 +395,8 @@ The frontend follows a professional design system built on CSS custom properties
 
 ### Pages
 
-- **Login** — Email + password form, link to register. Rendered without sidebar.
-- **Register** — Name + email + password form with validation hints, link to login. Rendered without sidebar.
+- **Login** — Email + password form, link to register. Language switcher in top-right corner. Rendered without sidebar.
+- **Register** — Name + email + password form with validation hints, link to login. Language switcher in top-right corner. Rendered without sidebar.
 - **Chat** — Empty state with document + chat bubble illustration and example query chips. Messages area with avatars. "New Chat" button. Conversations loaded from URL param `?c=<id>`. Disclaimer footer.
 - **Upload** — Dropzone with cloud icon, animated spinner during upload, success/error alert cards.
 - **Documents** — Document count subtitle, loading spinner, card-based table with hover states.
