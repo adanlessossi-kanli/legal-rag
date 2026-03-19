@@ -27,7 +27,7 @@ A retrieval-augmented generation application for legal documents. Upload contrac
 
 | Layer       | Technology                                      |
 |------------|--------------------------------------------------|
-| Frontend   | Next.js 14 (App Router), TypeScript, Tailwind CSS |
+| Frontend   | Next.js 14 (App Router), TypeScript, Tailwind CSS, next-intl |
 | Backend    | Python 3.12, FastAPI                              |
 | Database   | MongoDB Atlas (data + vector search)               |
 | LLM        | OpenAI GPT-4o                                     |
@@ -305,14 +305,21 @@ legal-rag/
 │   ├── requirements.txt
 │   └── .env.example
 ├── frontend/
+│   ├── messages/                 # Translation files (i18n)
+│   │   ├── en.json               #   English (default)
+│   │   ├── fr.json               #   French
+│   │   ├── de.json               #   German
+│   │   └── it.json               #   Italian
 │   └── src/
 │       ├── app/
-│       │   ├── page.tsx          # Chat page (conversation-aware)
-│       │   ├── layout.tsx        # Root layout with AuthGuard
-│       │   ├── login/page.tsx    # Login page
-│       │   ├── register/page.tsx # Register page
-│       │   ├── upload/page.tsx   # Upload page
-│       │   └── documents/page.tsx# Documents page
+│       │   ├── layout.tsx        # Root layout (font, global CSS)
+│       │   └── [locale]/         # Locale-based routing segment
+│       │       ├── layout.tsx    #   NextIntlClientProvider + AuthGuard
+│       │       ├── page.tsx      #   Chat page (conversation-aware)
+│       │       ├── login/page.tsx    # Login page
+│       │       ├── register/page.tsx # Register page
+│       │       ├── upload/page.tsx   # Upload page
+│       │       └── documents/page.tsx# Documents page
 │       ├── components/
 │       │   ├── AuthGuard.tsx     # Auth redirect + sidebar layout
 │       │   ├── ChatInput.tsx     # Auto-resizing textarea + send
@@ -320,11 +327,17 @@ legal-rag/
 │       │   ├── DocumentTable.tsx # Document list table
 │       │   ├── ErrorBoundary.tsx # Error fallback UI
 │       │   ├── FileDropzone.tsx  # Drag-and-drop upload
+│       │   ├── LanguageSwitcher.tsx # Locale dropdown selector
 │       │   ├── LoadingIndicator.tsx # Typing dots animation
-│       │   └── Sidebar.tsx       # Nav, conversations, user info
-│       └── lib/
-│           ├── api.ts            # API client (Bearer auth, auto-refresh)
-│           └── auth.ts           # Token management (login, register, logout)
+│       │   └── Sidebar.tsx       # Nav, conversations, language switcher, user info
+│       ├── i18n/                 # Internationalization config
+│       │   ├── config.ts         #   Supported locales + default
+│       │   ├── navigation.ts     #   Localized Link, useRouter, usePathname
+│       │   └── request.ts        #   next-intl request config (message loading)
+│       ├── lib/
+│       │   ├── api.ts            # API client (Bearer auth, auto-refresh)
+│       │   └── auth.ts           # Token management (login, register, logout)
+│       └── middleware.ts         # Locale detection + URL rewriting
 └── specs/                        # Project specifications
 ```
 
@@ -352,6 +365,7 @@ legal-rag/
 - **Responsive UI** — Sidebar collapses on mobile, dark mode support, accessible navigation.
 - **Security** — JWT auth, bcrypt password hashing (SHA-256 pre-hash), refresh token rotation, rate limiting, input length limits, user-scoped data isolation.
 - **Observability** — Structured JSON logging, request ID tracing, deep health checks (MongoDB + OpenAI).
+- **Internationalization** — Full i18n support for English, French, German, and Italian via `next-intl`. URL-based locale routing (`/fr/...`, `/de/...`, `/it/...`), language switcher in sidebar, ICU message format for pluralization, locale-aware date formatting.
 
 ## UI Design
 
@@ -370,7 +384,8 @@ The frontend follows a professional design system built on CSS custom properties
 | Component | Description |
 |-----------|-------------|
 | AuthGuard | Client-side auth check, redirects to `/login` if unauthenticated, renders Sidebar for protected routes |
-| Sidebar | Branded logo, SVG nav icons, recent conversations list, user name/email display, logout button, mobile overlay with backdrop blur |
+| Sidebar | Branded logo, SVG nav icons, recent conversations list, language switcher, user name/email display, logout button, mobile overlay with backdrop blur |
+| LanguageSwitcher | Locale dropdown (EN/FR/DE/IT), switches URL locale and re-renders all translated text |
 | ChatMessage | User/assistant avatars, directional bubble tails, expandable source cards with document icons |
 | ChatInput | Auto-resizing textarea, integrated send button, shadow elevation on focus |
 | FileDropzone | Cloud-upload SVG illustration, scale animation on drag, inline error alerts |
