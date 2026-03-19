@@ -7,15 +7,14 @@ venv/
 # Data
 backend/chroma_data/
 backend/uploads/
-backend/.env
 
 # Node
 node_modules/
 .next/
 frontend/.env.local
+/backend/.env
 
 # IDE
 .vscode/
 .idea/
 *.swp
-!/backend/.env
