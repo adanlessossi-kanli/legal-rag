@@ -1,10 +1,65 @@
+import re
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, EmailStr, field_validator
 
 from app.core.config import settings
 
+
+# --- Auth ---
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str
+    name: str
+
+    @field_validator("password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("Password must contain an uppercase letter")
+        if not re.search(r"[a-z]", v):
+            raise ValueError("Password must contain a lowercase letter")
+        if not re.search(r"\d", v):
+            raise ValueError("Password must contain a digit")
+        return v
+
+    @field_validator("name")
+    @classmethod
+    def name_not_empty(cls, v: str) -> str:
+        v = v.strip()
+        if not v or len(v) > 100:
+            raise ValueError("Name must be 1-100 characters")
+        return v
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class UserInfo(BaseModel):
+    id: str
+    email: str
+    name: str
+    created_at: datetime
+
+
+class AuthResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    user: UserInfo | None = None
+
+
+# --- Chat ---
 
 class ChatMessage(BaseModel):
     role: Literal["user", "assistant"]
@@ -13,6 +68,7 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     question: str
+    conversation_id: str | None = None
     history: list[ChatMessage] = []
 
     @field_validator("question")
@@ -35,7 +91,10 @@ class Source(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     sources: list[Source]
+    conversation_id: str | None = None
 
+
+# --- Documents ---
 
 class DocumentInfo(BaseModel):
     id: str
@@ -56,6 +115,29 @@ class DeleteResponse(BaseModel):
     detail: str
 
 
+# --- Health ---
+
 class HealthResponse(BaseModel):
     status: str
     checks: dict[str, str] | None = None
+
+
+# --- Conversations ---
+
+class ConversationSummary(BaseModel):
+    id: str
+    title: str
+    updated_at: datetime
+
+
+class MessageOut(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+    sources: list[Source] = []
+    created_at: datetime
+
+
+class ConversationDetail(BaseModel):
+    id: str
+    title: str
+    messages: list[MessageOut]

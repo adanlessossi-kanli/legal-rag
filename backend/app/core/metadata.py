@@ -1,109 +1,74 @@
-import json
 import logging
-import sqlite3
-import threading
 from datetime import datetime, timezone
-from pathlib import Path
 
-from app.core.config import settings
+from bson import ObjectId
+
+from app.core.database import get_db
 
 logger = logging.getLogger(__name__)
 
-_DB_PATH = Path(settings.upload_dir) / "metadata.db"
-_JSON_PATH = Path(settings.upload_dir) / "metadata.json"
 
-_local = threading.local()
-
-
-def _get_conn() -> sqlite3.Connection:
-    conn = getattr(_local, "conn", None)
-    if conn is None:
-        _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(str(_DB_PATH), check_same_thread=False)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute(
-            """CREATE TABLE IF NOT EXISTS documents (
-                id          TEXT PRIMARY KEY,
-                name        TEXT NOT NULL,
-                uploaded_at TEXT NOT NULL,
-                chunk_count INTEGER NOT NULL DEFAULT 0,
-                status      TEXT NOT NULL DEFAULT 'processing',
-                content_hash TEXT
-            )"""
-        )
-        _local.conn = conn
-    return conn
+async def save_document(doc_id: str, name: str, chunk_count: int, status: str, content_hash: str = "", user_id: str = "") -> None:
+    db = get_db()
+    await db.documents.update_one(
+        {"doc_id": doc_id},
+        {"$set": {
+            "doc_id": doc_id,
+            "user_id": ObjectId(user_id) if user_id else None,
+            "name": name,
+            "uploaded_at": datetime.now(timezone.utc),
+            "chunk_count": chunk_count,
+            "status": status,
+            "content_hash": content_hash,
+        }},
+        upsert=True,
+    )
 
 
-def _init_db() -> None:
-    with _get_conn() as conn:
-        conn.execute(
-            """CREATE TABLE IF NOT EXISTS documents (
-                id          TEXT PRIMARY KEY,
-                name        TEXT NOT NULL,
-                uploaded_at TEXT NOT NULL,
-                chunk_count INTEGER NOT NULL DEFAULT 0,
-                status      TEXT NOT NULL DEFAULT 'processing',
-                content_hash TEXT
-            )"""
-        )
+async def get_all_documents(user_id: str) -> list[dict]:
+    db = get_db()
+    cursor = db.documents.find({"user_id": ObjectId(user_id)})
+    docs = []
+    async for doc in cursor:
+        docs.append({
+            "id": doc["doc_id"],
+            "name": doc["name"],
+            "uploaded_at": doc["uploaded_at"],
+            "chunk_count": doc["chunk_count"],
+            "status": doc["status"],
+        })
+    return docs
 
 
-def _migrate_from_json() -> None:
-    if not _JSON_PATH.exists() or _DB_PATH.exists():
-        return
-    try:
-        data = json.loads(_JSON_PATH.read_text(encoding="utf-8"))
-        _init_db()
-        with _get_conn() as conn:
-            for doc_id, info in data.items():
-                conn.execute(
-                    "INSERT OR IGNORE INTO documents (id, name, uploaded_at, chunk_count, status) VALUES (?, ?, ?, ?, ?)",
-                    (doc_id, info["name"], info.get("uploaded_at", ""), info.get("chunk_count", 0), info.get("status", "ready")),
-                )
-        _JSON_PATH.rename(_JSON_PATH.with_suffix(".json.bak"))
-        logger.info("Migrated metadata from JSON to SQLite")
-    except Exception:
-        logger.exception("Failed to migrate metadata from JSON")
+async def get_document(doc_id: str) -> dict | None:
+    db = get_db()
+    doc = await db.documents.find_one({"doc_id": doc_id})
+    if not doc:
+        return None
+    return {
+        "id": doc["doc_id"],
+        "name": doc["name"],
+        "uploaded_at": doc["uploaded_at"],
+        "chunk_count": doc["chunk_count"],
+        "status": doc["status"],
+        "user_id": str(doc.get("user_id", "")),
+    }
 
 
-_migrate_from_json()
-_init_db()
+async def delete_document(doc_id: str) -> bool:
+    db = get_db()
+    result = await db.documents.delete_one({"doc_id": doc_id})
+    return result.deleted_count > 0
 
 
-def save_document(doc_id: str, name: str, chunk_count: int, status: str, content_hash: str = "") -> None:
-    with _get_conn() as conn:
-        conn.execute(
-            "INSERT OR REPLACE INTO documents (id, name, uploaded_at, chunk_count, status, content_hash) VALUES (?, ?, ?, ?, ?, ?)",
-            (doc_id, name, datetime.now(timezone.utc).isoformat(), chunk_count, status, content_hash),
-        )
+async def update_status(doc_id: str, status: str) -> None:
+    db = get_db()
+    await db.documents.update_one({"doc_id": doc_id}, {"$set": {"status": status}})
 
 
-def get_all_documents() -> list[dict]:
-    with _get_conn() as conn:
-        rows = conn.execute("SELECT * FROM documents").fetchall()
-    return [dict(r) for r in rows]
-
-
-def get_document(doc_id: str) -> dict | None:
-    with _get_conn() as conn:
-        row = conn.execute("SELECT * FROM documents WHERE id = ?", (doc_id,)).fetchone()
-    return dict(row) if row else None
-
-
-def delete_document(doc_id: str) -> bool:
-    with _get_conn() as conn:
-        cursor = conn.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
-    return cursor.rowcount > 0
-
-
-def update_status(doc_id: str, status: str) -> None:
-    with _get_conn() as conn:
-        conn.execute("UPDATE documents SET status = ? WHERE id = ?", (status, doc_id))
-
-
-def find_by_hash(content_hash: str) -> dict | None:
-    with _get_conn() as conn:
-        row = conn.execute("SELECT * FROM documents WHERE content_hash = ?", (content_hash,)).fetchone()
-    return dict(row) if row else None
+async def find_by_hash(content_hash: str, user_id: str) -> dict | None:
+    db = get_db()
+    doc = await db.documents.find_one({"content_hash": content_hash, "user_id": ObjectId(user_id)})
+    if not doc:
+        return None
+    return {"id": doc["doc_id"], "name": doc["name"]}

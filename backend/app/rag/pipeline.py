@@ -14,16 +14,19 @@ from app.rag.vectorstore import delete_by_doc_id, retrieve, store_chunks
 logger = logging.getLogger(__name__)
 
 
-async def ingest(file_path: str, original_name: str, doc_id: str, content_hash: str) -> int:
-    save_document(doc_id, original_name, 0, "processing", content_hash)
+async def ingest(file_path: str, original_name: str, doc_id: str, content_hash: str, user_id: str = "") -> int:
+    await save_document(doc_id, original_name, 0, "processing", content_hash, user_id)
     try:
         pages = load_document(file_path)
         chunks = chunk_pages(pages, doc_id)
+        # Tag chunks with user_id
+        for c in chunks:
+            c.metadata["user_id"] = user_id
         await store_chunks(chunks)
-        save_document(doc_id, original_name, len(chunks), "ready", content_hash)
+        await save_document(doc_id, original_name, len(chunks), "ready", content_hash, user_id)
         return len(chunks)
     except Exception:
-        update_status(doc_id, "error")
+        await update_status(doc_id, "error")
         logger.exception("Ingestion failed for %s", original_name)
         raise
 
@@ -34,17 +37,17 @@ async def _resolve_query(question: str, history: list[ChatMessage]) -> str:
     return question
 
 
-async def query(question: str, history: list[ChatMessage]) -> tuple[str, list[Source]]:
+async def query(question: str, history: list[ChatMessage], user_id: str = "") -> tuple[str, list[Source]]:
     search_query = await _resolve_query(question, history)
-    chunks = await retrieve(search_query)
+    chunks = await retrieve(search_query, user_id)
     answer = await generate(question, chunks, history)
     sources = _build_sources(chunks)
     return answer, sources
 
 
-async def query_stream(question: str, history: list[ChatMessage]) -> tuple[AsyncGenerator[str, None], list[Source]]:
+async def query_stream(question: str, history: list[ChatMessage], user_id: str = "") -> tuple[AsyncGenerator[str, None], list[Source]]:
     search_query = await _resolve_query(question, history)
-    chunks = await retrieve(search_query)
+    chunks = await retrieve(search_query, user_id)
     sources = _build_sources(chunks)
     return generate_stream(question, chunks, history), sources
 

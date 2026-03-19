@@ -7,14 +7,14 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request,
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from app.core.auth import verify_api_key
+from app.core.auth import get_current_user
 from app.core.config import settings
 from app.core.metadata import find_by_hash, save_document, update_status
 from app.models.schemas import UploadResponse
 from app.rag.pipeline import compute_hash, ingest
 
 logger = logging.getLogger(__name__)
-router = APIRouter(dependencies=[Depends(verify_api_key)])
+router = APIRouter(dependencies=[Depends(get_current_user)])
 limiter = Limiter(key_func=get_remote_address)
 
 ALLOWED_EXTENSIONS = {".pdf", ".txt", ".docx"}
@@ -36,17 +36,17 @@ async def _read_with_limit(file: UploadFile, max_bytes: int) -> bytes:
     return b"".join(chunks)
 
 
-async def _background_ingest(file_path: str, original_name: str, doc_id: str, content_hash: str) -> None:
+async def _background_ingest(file_path: str, original_name: str, doc_id: str, content_hash: str, user_id: str) -> None:
     try:
-        await ingest(file_path, original_name, doc_id, content_hash)
+        await ingest(file_path, original_name, doc_id, content_hash, user_id)
     except Exception:
         logger.exception("Background ingestion failed for %s", doc_id)
-        update_status(doc_id, "error")
+        await update_status(doc_id, "error")
 
 
 @router.post("/upload", response_model=UploadResponse)
 @limiter.limit(settings.rate_limit_upload)
-async def upload(request: Request, file: UploadFile, background_tasks: BackgroundTasks):
+async def upload(request: Request, file: UploadFile, background_tasks: BackgroundTasks, user: dict = Depends(get_current_user)):
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
 
@@ -58,8 +58,9 @@ async def upload(request: Request, file: UploadFile, background_tasks: Backgroun
     if len(content) == 0:
         raise HTTPException(status_code=400, detail="Empty file")
 
+    user_id = str(user["_id"])
     content_hash = compute_hash(content)
-    existing = find_by_hash(content_hash)
+    existing = await find_by_hash(content_hash, user_id)
     if existing:
         raise HTTPException(status_code=409, detail=f"Document already uploaded as '{existing['name']}' (id: {existing['id']})")
 
@@ -70,8 +71,7 @@ async def upload(request: Request, file: UploadFile, background_tasks: Backgroun
     file_path = upload_dir / f"{doc_id}_{safe_name}"
     file_path.write_bytes(content)
 
-    # Save initial metadata and kick off background ingestion
-    save_document(doc_id, file.filename, 0, "processing", content_hash)
-    background_tasks.add_task(_background_ingest, str(file_path), file.filename, doc_id, content_hash)
+    await save_document(doc_id, file.filename, 0, "processing", content_hash, user_id)
+    background_tasks.add_task(_background_ingest, str(file_path), file.filename, doc_id, content_hash, user_id)
 
     return UploadResponse(id=doc_id, name=file.filename, chunk_count=0, status="processing")
