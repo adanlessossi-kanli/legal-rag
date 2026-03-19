@@ -16,12 +16,13 @@ async def health(deep: bool = False):
     checks: dict[str, str] = {}
 
     try:
-        from app.rag.vectorstore import collection
-        collection.count()
-        checks["chromadb"] = "ok"
+        from app.core.database import get_db
+        db = get_db()
+        await db.command("ping")
+        checks["mongodb"] = "ok"
     except Exception:
-        checks["chromadb"] = "chromadb_unavailable"
-        logger.exception("Deep health check: ChromaDB failed")
+        checks["mongodb"] = "mongodb_unavailable"
+        logger.exception("Deep health check: MongoDB failed")
 
     try:
         from app.core.clients import openai_client

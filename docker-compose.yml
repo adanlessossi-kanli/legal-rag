@@ -1,0 +1,13 @@
+services:
+  mongodb:
+    image: mongodb/mongodb-atlas-local:8.0
+    container_name: legal-rag-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      - MONGODB_INITDB_DATABASE=legal_rag
+
+volumes:
+  mongodb_data:

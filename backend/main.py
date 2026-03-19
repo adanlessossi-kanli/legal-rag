@@ -6,15 +6,15 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pythonjsonlogger import jsonlogger  # python-json-logger 2.x
+from pythonjsonlogger import jsonlogger
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from app.api import chat, documents, health, upload
+from app.api import auth, chat, conversations, documents, health, upload
 from app.core.config import settings
+from app.core.database import close_db, connect_db
 
-# Structured JSON logging
 handler = logging.StreamHandler()
 if settings.log_format == "json":
     handler.setFormatter(jsonlogger.JsonFormatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
@@ -26,8 +26,10 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await connect_db()
     logger.info("Starting Legal RAG API")
     yield
+    await close_db()
     logger.info("Shutting down Legal RAG API")
 
 
@@ -40,7 +42,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins.split(","),
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "X-API-Key"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 
@@ -73,6 +75,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 app.include_router(health.router, prefix="/api")
+app.include_router(auth.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 app.include_router(upload.router, prefix="/api")
 app.include_router(documents.router, prefix="/api")
+app.include_router(conversations.router, prefix="/api")

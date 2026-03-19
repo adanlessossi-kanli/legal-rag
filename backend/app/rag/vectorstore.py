@@ -1,18 +1,16 @@
 import logging
 import time
 
-import chromadb
+from bson import ObjectId
 from openai import APIConnectionError, APITimeoutError, RateLimitError
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from app.core.clients import openai_client
 from app.core.config import settings
+from app.core.database import get_db
 from app.rag.chunker import Chunk
 
 logger = logging.getLogger(__name__)
-
-_chroma = chromadb.PersistentClient(path=settings.chroma_persist_dir)
-collection = _chroma.get_or_create_collection("legal_documents")
 
 BATCH_SIZE = 100
 
@@ -30,41 +28,66 @@ async def _embed(texts: list[str]) -> list[list[float]]:
 
 
 async def store_chunks(chunks: list[Chunk]) -> None:
+    db = get_db()
     for i in range(0, len(chunks), BATCH_SIZE):
         batch = chunks[i : i + BATCH_SIZE]
         embeddings = await _embed([c.text for c in batch])
-        collection.add(
-            ids=[c.chunk_id for c in batch],
-            documents=[c.text for c in batch],
-            embeddings=embeddings,
-            metadatas=[c.metadata for c in batch],
-        )
-    logger.info("Stored %d chunks in ChromaDB", len(chunks))
+        docs = [
+            {
+                "chunk_id": c.chunk_id,
+                "doc_id": c.metadata.get("doc_id", ""),
+                "user_id": c.metadata.get("user_id", ""),
+                "text": c.text,
+                "embedding": emb,
+                "metadata": c.metadata,
+            }
+            for c, emb in zip(batch, embeddings)
+        ]
+        await db.chunks.insert_many(docs)
+    logger.info("Stored %d chunks in MongoDB", len(chunks))
 
 
-async def retrieve(question: str) -> list[dict]:
+async def retrieve(question: str, user_id: str = "") -> list[dict]:
     start = time.time()
+    db = get_db()
     q_embedding = (await _embed([question]))[0]
-    results = collection.query(
-        query_embeddings=[q_embedding],
-        n_results=settings.retrieval_top_k,
-        include=["documents", "metadatas", "distances"],
-    )
-    elapsed = time.time() - start
+
+    pipeline = [
+        {
+            "$vectorSearch": {
+                "index": settings.vector_search_index,
+                "path": "embedding",
+                "queryVector": q_embedding,
+                "numCandidates": settings.retrieval_top_k * 10,
+                "limit": settings.retrieval_top_k,
+                **({"filter": {"user_id": user_id}} if user_id else {}),
+            }
+        },
+        {
+            "$project": {
+                "chunk_id": 1,
+                "text": 1,
+                "metadata": 1,
+                "score": {"$meta": "vectorSearchScore"},
+            }
+        },
+    ]
 
     chunks = []
-    for cid, doc, meta, dist in zip(
-        results["ids"][0], results["documents"][0], results["metadatas"][0], results["distances"][0]
-    ):
-        if dist <= settings.retrieval_min_score:
-            chunks.append({"chunk_id": cid, "text": doc, "metadata": meta})
+    async for doc in db.chunks.aggregate(pipeline):
+        if doc["score"] >= settings.retrieval_min_score:
+            chunks.append({
+                "chunk_id": doc["chunk_id"],
+                "text": doc["text"],
+                "metadata": doc["metadata"],
+            })
 
-    logger.info("Retrieval took %.2fs, returned %d/%d chunks (threshold=%.2f)", elapsed, len(chunks), len(results["ids"][0]), settings.retrieval_min_score)
+    elapsed = time.time() - start
+    logger.info("Retrieval took %.2fs, returned %d chunks (threshold=%.2f)", elapsed, len(chunks), settings.retrieval_min_score)
     return chunks
 
 
 async def delete_by_doc_id(doc_id: str) -> None:
-    results = collection.get(where={"doc_id": doc_id}, include=[])
-    if results["ids"]:
-        collection.delete(ids=results["ids"])
-        logger.info("Deleted %d chunks for doc %s", len(results["ids"]), doc_id)
+    db = get_db()
+    result = await db.chunks.delete_many({"doc_id": doc_id})
+    logger.info("Deleted %d chunks for doc %s", result.deleted_count, doc_id)
