@@ -350,7 +350,7 @@ legal-rag/
 - **DOCX support** — Upload Word documents alongside PDF and TXT.
 - **File validation** — Client-side and server-side type/size checks, filename sanitization, duplicate detection per user.
 - **Responsive UI** — Sidebar collapses on mobile, dark mode support, accessible navigation.
-- **Security** — JWT auth, bcrypt password hashing, refresh token rotation, rate limiting, input length limits, user-scoped data isolation.
+- **Security** — JWT auth, bcrypt password hashing (SHA-256 pre-hash), refresh token rotation, rate limiting, input length limits, user-scoped data isolation.
 - **Observability** — Structured JSON logging, request ID tracing, deep health checks (MongoDB + OpenAI).
 
 ## UI Design
