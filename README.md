@@ -43,15 +43,51 @@ A retrieval-augmented generation application for legal documents. Upload contrac
 - An OpenAI API key
 - A MongoDB Atlas cluster for production (free tier M0 works)
 
-### Local MongoDB (Docker)
+### Quick Start (all services)
 
-Start a local MongoDB instance with Atlas Vector Search support:
+One command to start MongoDB, backend, and frontend:
+
+```bash
+# macOS / Linux
+chmod +x start.sh
+./start.sh
+
+# Windows
+start.bat
+```
+
+This will:
+1. Start MongoDB via Docker Compose
+2. Wait for MongoDB to be ready
+3. Create the vector search index
+4. Create a Python venv and install dependencies (if needed)
+5. Start the backend on `http://localhost:8000`
+6. Install npm dependencies (if needed)
+7. Start the frontend on `http://localhost:3000`
+
+To stop all services:
+
+```bash
+# macOS / Linux
+./stop.sh
+
+# Windows
+stop.bat
+```
+
+**Prerequisite:** copy `backend/.env.example` to `backend/.env` and set your `OPENAI_API_KEY` and `JWT_SECRET` before running.
+
+### Manual Setup
+
+If you prefer to start services individually:
+
+#### Local MongoDB (Docker)
 
 ```bash
 docker compose up -d
 ```
 
-This uses the [`mongodb-atlas-local`](https://hub.docker.com/r/mongodb/mongodb-atlas-local) image which supports `$vectorSearch` locally. Data persists in a Docker volume.
+This uses the [`mongodb-atlas-local`](https://hub.docker.com/r/mongodb/mongodb-atlas-local) image which supports `$vectorSearch` locally. Data is ephemeral — it resets when the container is removed.
 
 Then create the vector search index:
 
@@ -63,11 +99,10 @@ python scripts/create_vector_index.py
 To stop / reset:
 
 ```bash
-docker compose down            # stop (data preserved)
-docker compose down -v         # stop and delete data
+docker compose down            # stop and remove container
 ```
 
-### MongoDB Atlas Vector Search Index (Production)
+#### MongoDB Atlas Vector Search Index (Production)
 
 For production with Atlas, create the vector search index manually:
 
@@ -92,7 +127,7 @@ For production with Atlas, create the vector search index manually:
 }
 ```
 
-### Backend
+#### Backend
 
 ```bash
 cd backend
@@ -108,7 +143,7 @@ copy .env.example .env   # then set OPENAI_API_KEY, MONGODB_*, JWT_SECRET
 uvicorn main:app --reload
 ```
 
-#### Generating a JWT Secret
+##### Generating a JWT Secret
 
 `JWT_SECRET` must be a long, random string. Generate one with:
 
@@ -133,7 +168,7 @@ Never commit this value to version control. Use a different secret for each envi
 
 Backend runs at `http://localhost:8000`.
 
-### Frontend
+#### Frontend
 
 ```bash
 cd frontend
@@ -275,6 +310,10 @@ Ingestion runs in the background — the response returns immediately with `stat
 ```
 legal-rag/
 ├── docker-compose.yml      # Local MongoDB with Atlas Vector Search
+├── start.sh                # One-command startup (macOS/Linux)
+├── start.bat               # One-command startup (Windows)
+├── stop.sh                 # Stop all services (macOS/Linux)
+├── stop.bat                # Stop all services (Windows)
 ├── scripts/
 │   └── create_vector_index.py  # Create vector search index locally
 ├── backend/
