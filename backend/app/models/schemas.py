@@ -157,3 +157,43 @@ class ConversationDetail(BaseModel):
     id: str
     title: str
     messages: list[MessageOut]
+
+
+# --- Organizations ---
+
+class CreateOrgRequest(BaseModel):
+    name: str
+
+    @field_validator("name")
+    @classmethod
+    def name_not_empty(cls, v: str) -> str:
+        v = v.strip()
+        if not v or len(v) > 100:
+            raise ValueError("Name must be 1-100 characters")
+        return v
+
+
+class InviteMemberRequest(BaseModel):
+    email: EmailStr
+    role: Literal["admin", "member"] = "member"
+
+
+class OrgMember(BaseModel):
+    user_id: str
+    email: str
+    name: str
+    role: Literal["admin", "member"]
+
+
+class OrgSummary(BaseModel):
+    id: str
+    name: str
+    member_count: int
+
+
+class OrgDetail(BaseModel):
+    id: str
+    name: str
+    owner_id: str
+    created_at: datetime
+    members: list[OrgMember]

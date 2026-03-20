@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 venv/
 .env
+*.egg-info/
 
 # Data
 backend/uploads/

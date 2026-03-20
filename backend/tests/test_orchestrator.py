@@ -143,6 +143,7 @@ async def test_ingest_delegates_to_librarian(orchestrator, agents):
         "doc_id": "doc1",
         "content_hash": "a" * 64,
         "user_id": "user1",
+        "org_id": "",
     })
 
 

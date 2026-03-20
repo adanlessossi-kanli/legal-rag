@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from app.core.auth import get_current_user
+from app.core.auth import get_current_user, get_org_id
+from app.core.cache import invalidate_user_cache
 from app.core.config import settings
 from app.core.ingestion_queue import enqueue
 from app.core.metadata import find_by_hash, save_document
@@ -55,6 +56,7 @@ async def upload(request: Request, file: UploadFile, user: dict = Depends(get_cu
         raise HTTPException(status_code=400, detail="Empty file")
 
     user_id = str(user["_id"])
+    org_id = get_org_id(user) or ""
     content_hash = compute_hash(content)
     existing = await find_by_hash(content_hash, user_id)
     if existing:
@@ -67,7 +69,8 @@ async def upload(request: Request, file: UploadFile, user: dict = Depends(get_cu
     file_path = upload_dir / f"{doc_id}_{safe_name}"
     file_path.write_bytes(content)
 
-    await save_document(doc_id, file.filename, 0, "processing", content_hash, user_id)
-    await enqueue(str(file_path), file.filename, doc_id, content_hash, user_id)
+    await save_document(doc_id, file.filename, 0, "processing", content_hash, user_id, org_id)
+    await enqueue(str(file_path), file.filename, doc_id, content_hash, user_id, org_id)
+    await invalidate_user_cache(user_id)
 
     return UploadResponse(id=doc_id, name=file.filename, chunk_count=0, status="processing")

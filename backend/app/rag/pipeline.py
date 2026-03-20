@@ -14,8 +14,8 @@ NO_CONTEXT_ANSWER = (
 )
 
 
-async def ingest(file_path: str, original_name: str, doc_id: str, content_hash: str, user_id: str = "") -> int:
-    return await get_orchestrator().ingest(file_path, original_name, doc_id, content_hash, user_id)
+async def ingest(file_path: str, original_name: str, doc_id: str, content_hash: str, user_id: str = "", org_id: str = "") -> int:
+    return await get_orchestrator().ingest(file_path, original_name, doc_id, content_hash, user_id, org_id)
 
 
 async def query(
@@ -24,8 +24,9 @@ async def query(
     user_id: str = "",
     document_ids: list[str] | None = None,
     on_status: StatusCallback | None = None,
+    org_id: str | None = None,
 ) -> tuple[str, list[Source], bool]:
-    return await get_orchestrator().query(question, history, user_id, document_ids, on_status)
+    return await get_orchestrator().query(question, history, user_id, document_ids, on_status, org_id=org_id)
 
 
 async def query_stream(
@@ -34,8 +35,9 @@ async def query_stream(
     user_id: str = "",
     document_ids: list[str] | None = None,
     on_status: StatusCallback | None = None,
+    org_id: str | None = None,
 ) -> tuple[AsyncGenerator[str, None] | None, list[Source], bool]:
-    return await get_orchestrator().query_stream(question, history, user_id, document_ids, on_status)
+    return await get_orchestrator().query_stream(question, history, user_id, document_ids, on_status, org_id=org_id)
 
 
 async def remove_document(doc_id: str) -> None:

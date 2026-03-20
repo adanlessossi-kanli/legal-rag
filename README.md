@@ -38,8 +38,10 @@ A retrieval-augmented generation application for legal documents. Upload contrac
 | Frontend   | Next.js 14 (App Router), TypeScript, Tailwind CSS, next-intl |
 | Backend    | Python 3.12, FastAPI                              |
 | Database   | MongoDB Atlas (data + vector search)               |
+| Cache      | Redis (query response caching)                    |
 | LLM        | OpenAI GPT-4o                                     |
 | Embeddings | OpenAI text-embedding-3-small                     |
+| Monitoring | Prometheus (prometheus-client)                    |
 
 ## Getting Started
 
@@ -65,7 +67,7 @@ start.bat
 ```
 
 This will:
-1. Start MongoDB via Docker Compose
+1. Start MongoDB and Redis via Docker Compose
 2. Wait for MongoDB to be ready
 3. Create the vector search index
 4. Create a Python venv and install dependencies (if needed)
@@ -84,6 +86,22 @@ stop.bat
 ```
 
 **Prerequisite:** copy `backend/.env.example` to `backend/.env` and set your `OPENAI_API_KEY` and `JWT_SECRET` before running.
+
+### Production Deployment (Docker)
+
+Build and run all services in containers:
+
+```bash
+# Build and start everything
+docker compose -f docker-compose.prod.yml up -d --build
+
+# Create the vector search index (first time only)
+docker compose -f docker-compose.prod.yml exec backend python ../scripts/create_vector_index.py
+```
+
+This starts MongoDB, Redis, the backend, frontend, and runs database migrations automatically via the `migrate` service. Data is persisted in Docker volumes.
+
+To deploy to a remote environment, push images to GHCR (handled by CI/CD) and point `MONGODB_HOST`, `REDIS_URL`, and `CORS_ORIGINS` to your production infrastructure.
 
 ### Manual Setup
 
@@ -129,6 +147,14 @@ For production with Atlas, create the vector search index manually:
     {
       "type": "filter",
       "path": "user_id"
+    },
+    {
+      "type": "filter",
+      "path": "org_id"
+    },
+    {
+      "type": "filter",
+      "path": "doc_id"
     }
   ]
 }
@@ -185,14 +211,62 @@ npm run dev
 
 Frontend runs at `http://localhost:3000`.
 
+### Database Migrations
+
+Schema changes (indexes, collections) are managed via versioned migration scripts in `backend/migrations/versions/`. Each file has a timestamp prefix and an `async def up(db)` function.
+
+```bash
+# Check migration status
+python backend/migrations/runner.py --status
+
+# Apply pending migrations
+python backend/migrations/runner.py
+```
+
+To create a new migration:
+
+1. Create a file in `backend/migrations/versions/` with a timestamp prefix:
+   ```
+   backend/migrations/versions/20250615_120000_add_tags_index.py
+   ```
+2. Implement the `up(db)` function:
+   ```python
+   async def up(db):
+       await db.documents.create_index("tags")
+   ```
+3. Commit the file. The CI/CD pipeline runs migrations automatically on deploy.
+
+Applied migrations are tracked in the `_migrations` collection — each migration runs exactly once.
+
 ### Running Tests
+
+#### Unit Tests
 
 ```bash
 cd backend
 pytest tests/ -v
 ```
 
-All tests mock OpenAI calls and use an in-memory MongoDB (via `mongomock-motor`), so no external services are needed.
+All unit tests mock OpenAI calls and use an in-memory MongoDB (via `mongomock-motor`), so no external services are needed.
+
+#### Integration Tests
+
+Integration tests run against the real local MongoDB Docker container and exercise the full `$vectorSearch` retrieval path. They are marked with `@pytest.mark.integration` and skipped by default.
+
+```bash
+# Start MongoDB and create the vector search index first
+docker compose up -d
+python scripts/create_vector_index.py
+
+# Run integration tests
+pytest tests/test_integration.py -m integration -v
+
+# Run all tests (unit + integration)
+pytest tests/ -v
+
+# Run only unit tests (skip integration)
+pytest tests/ -m "not integration" -v
+```
 
 Test modules:
 - `test_chunker.py` — chunk count, overlap, size limits
@@ -209,6 +283,8 @@ Test modules:
 - `test_writer.py` — writer agent: answer generation (sync + streaming)
 - `test_orchestrator.py` — orchestrator: end-to-end multi-agent query flow
 - `test_agent_integration.py` — cross-agent integration scenarios
+- `test_metrics.py` — Prometheus metrics endpoint, per-user cost tracking
+- `test_integration.py` — real MongoDB `$vectorSearch` end-to-end (requires Docker)
 
 ## Configuration
 
@@ -254,6 +330,13 @@ All backend config is via environment variables (set in `backend/.env`):
 | `MAX_PAGE_SIZE`   | `100`                    | Maximum pagination page size |
 | `INGESTION_MAX_RETRIES` | `3`                | Max ingestion queue retry attempts |
 | `INGESTION_RETRY_DELAY_SECONDS` | `30`       | Delay between ingestion retries |
+| `REDIS_URL`  | `redis://localhost:6379/0`  | Redis connection URL             |
+| `CACHE_TTL_SECONDS` | `3600`              | Cache entry time-to-live         |
+| `CACHE_ENABLED` | `true`                  | Enable/disable Redis caching     |
+| `ENABLE_HYBRID_SEARCH` | `true`           | Enable keyword + vector hybrid search |
+| `KEYWORD_SEARCH_LIMIT` | `10`             | Max keyword search results to merge |
+| `ENABLE_RERANKING` | `true`               | Enable LLM-based reranking       |
+| `RERANK_MODEL` | `gpt-4o-mini`             | Model for reranking passages     |
 
 Frontend config (set in `frontend/.env.local`):
 
@@ -273,12 +356,20 @@ Frontend config (set in `frontend/.env.local`):
 | `GET`    | `/api/auth/me`              | Yes  | Get current user info                |
 | `POST`   | `/api/chat`                 | Yes  | Ask a question (`?stream=true` for SSE) |
 | `POST`   | `/api/upload`               | Yes  | Upload a PDF, TXT, or DOCX document |
-| `GET`    | `/api/documents`            | Yes  | List user's ingested documents (paginated) |
+| `GET`    | `/api/documents`            | Yes  | List user/org documents (paginated)  |
 | `GET`    | `/api/documents/{id}/status`| Yes  | Get document processing status       |
 | `DELETE` | `/api/documents/{id}`       | Yes  | Delete a document and its chunks     |
 | `GET`    | `/api/conversations`        | Yes  | List user's conversations (paginated) |
 | `GET`    | `/api/conversations/{id}`   | Yes  | Get conversation with messages       |
 | `DELETE` | `/api/conversations/{id}`   | Yes  | Delete a conversation                |
+| `GET`    | `/api/metrics`              | No   | Prometheus metrics scrape endpoint   |
+| `GET`    | `/api/usage`                | Yes  | Per-user OpenAI cost & token usage   |
+| `POST`   | `/api/organizations`        | Yes  | Create an organization               |
+| `GET`    | `/api/organizations`        | Yes  | List user's organizations            |
+| `GET`    | `/api/organizations/{id}`   | Yes  | Get organization details + members   |
+| `POST`   | `/api/organizations/{id}/members` | Yes | Invite a member (admin only)   |
+| `DELETE` | `/api/organizations/{id}/members/{uid}` | Yes | Remove a member (admin only) |
+| `WS`     | `/api/ws/ingestion`         | Yes* | WebSocket for ingestion notifications |
 
 ### POST /api/auth/register
 
@@ -339,6 +430,40 @@ data: {"type": "agent_status", "agent": "done", "status": "done"}
 data: {"type": "done"}
 ```
 
+### GET /api/usage
+
+```json
+// Request — GET /api/usage?month=2025-01 (month is optional, defaults to current)
+
+// Response 200
+{
+  "month": "2025-01",
+  "by_model": {
+    "gpt-4o": {
+      "prompt_tokens": 15000,
+      "completion_tokens": 3000,
+      "total_tokens": 18000,
+      "estimated_cost_usd": 0.0675,
+      "request_count": 12
+    },
+    "gpt-4o-mini": {
+      "prompt_tokens": 5000,
+      "completion_tokens": 1000,
+      "total_tokens": 6000,
+      "estimated_cost_usd": 0.00135,
+      "request_count": 8
+    }
+  },
+  "totals": {
+    "prompt_tokens": 20000,
+    "completion_tokens": 4000,
+    "total_tokens": 24000,
+    "estimated_cost_usd": 0.06885,
+    "request_count": 20
+  }
+}
+```
+
 ### POST /api/upload
 
 Send as `multipart/form-data` with a `file` field. Accepts `.pdf`, `.txt`, `.docx` (max 50MB).
@@ -353,7 +478,11 @@ Ingestion runs in the background — the response returns immediately with `stat
 
 ```
 legal-rag/
-├── docker-compose.yml      # Local MongoDB with Atlas Vector Search
+├── .github/
+│   └── workflows/
+│       └── ci.yml              # CI/CD: test, build, migrate, deploy
+├── docker-compose.yml      # Local dev: MongoDB + Redis only
+├── docker-compose.prod.yml # Production: all services containerized
 ├── start.sh                # One-command startup (macOS/Linux)
 ├── start.bat               # One-command startup (Windows)
 ├── stop.sh                 # Stop all services (macOS/Linux)
@@ -361,6 +490,11 @@ legal-rag/
 ├── scripts/
 │   └── create_vector_index.py  # Create vector search index locally
 ├── backend/
+│   ├── Dockerfile          # Multi-stage production image
+│   ├── migrations/
+│   │   ├── runner.py       # Migration runner (apply/status)
+│   │   └── versions/       # Versioned migration scripts
+│   │       └── 20250101_000000_initial_schema.py
 │   ├── app/
 │   │   ├── agents/         # Multi-agent system
 │   │   │   ├── base.py     #   BaseAgent, AgentError, tool registry
@@ -371,18 +505,25 @@ legal-rag/
 │   │   │   └── writer.py   #   Answer generation (sync + streaming)
 │   │   ├── api/            # Route handlers
 │   │   │   ├── auth.py     #   register, login, refresh, logout, me
-│   │   │   ├── chat.py     #   chat with conversation persistence
+│   │   │   ├── chat.py     #   chat with conversation persistence + caching
 │   │   │   ├── conversations.py  # list, get, delete conversations
-│   │   │   ├── documents.py#   list, status, delete documents (user-scoped)
-│   │   │   ├── health.py   #   health check (incl. agent health)
-│   │   │   └── upload.py   #   file upload (user-scoped)
+│   │   │   ├── documents.py#   list, status, delete documents (org/user-scoped)
+│   │   │   ├── health.py   #   health check (incl. agent + Redis health)
+│   │   │   ├── metrics.py  #   Prometheus scrape + usage endpoints
+│   │   │   ├── organizations.py # org CRUD + member management
+│   │   │   ├── upload.py   #   file upload (org/user-scoped)
+│   │   │   └── ws.py       #   WebSocket ingestion notifications
 │   │   ├── core/           # Infrastructure
-│   │   │   ├── auth.py     #   JWT auth dependency (get_current_user)
+│   │   │   ├── auth.py     #   JWT auth dependency (get_current_user, get_org_id)
+│   │   │   ├── cache.py    #   Redis cache (connect, get, set, invalidate)
 │   │   │   ├── clients.py  #   OpenAI async client
 │   │   │   ├── config.py   #   Settings from env vars
 │   │   │   ├── database.py #   Motor MongoDB client + indexes
-│   │   │   ├── ingestion_queue.py # Persistent MongoDB ingestion queue with retries
-│   │   │   ├── metadata.py #   Document metadata CRUD (MongoDB)
+│   │   │   ├── ingestion_queue.py # Persistent ingestion queue + WebSocket notifications
+│   │   │   ├── metadata.py #   Document metadata CRUD (org-aware)
+│   │   │   ├── metrics.py  #   Prometheus metrics (HTTP, OpenAI, retrieval)
+│   │   │   ├── notifications.py # WebSocket connection manager
+│   │   │   ├── usage.py    #   Per-user OpenAI cost tracking
 │   │   │   └── security.py #   Account lockout + CSP middleware
 │   │   ├── models/
 │   │   │   └── schemas.py  #   Pydantic schemas (auth, chat, docs, conversations)
@@ -391,7 +532,7 @@ legal-rag/
 │   │       ├── llm.py      #   OpenAI generation + query rewriting
 │   │       ├── loader.py   #   PDF/TXT/DOCX text extraction
 │   │       ├── pipeline.py #   Thin facade delegating to orchestrator
-│   │       └── vectorstore.py  # MongoDB Atlas Vector Search
+│   │       └── vectorstore.py  # Hybrid search (vector + keyword + RRF + rerank)
 │   ├── tests/
 │   │   ├── conftest.py     #   Fixtures: mock MongoDB, auth helpers
 │   │   ├── test_api.py     #   Validation, health, middleware
@@ -407,12 +548,15 @@ legal-rag/
 │   │   ├── test_summarizer.py  # Summarizer agent
 │   │   ├── test_writer.py      # Writer agent (sync + streaming)
 │   │   ├── test_orchestrator.py# Orchestrator end-to-end flow
-│   │   └── test_agent_integration.py # Cross-agent integration
+│   │   ├── test_agent_integration.py # Cross-agent integration
+│   │   ├── test_metrics.py     # Prometheus metrics + cost tracking
+│   │   └── test_integration.py # Real MongoDB $vectorSearch (Docker)
 │   ├── main.py             # FastAPI entrypoint
 │   ├── pytest.ini          # Pytest configuration
 │   ├── requirements.txt
 │   └── .env.example
 ├── frontend/
+│   ├── Dockerfile          # Multi-stage Next.js standalone image
 │   ├── messages/                 # Translation files (i18n)
 │   │   ├── en.json               #   English (default)
 │   │   ├── fr.json               #   French
@@ -470,8 +614,9 @@ Agents communicate via a tool-based protocol: each agent registers named tools, 
 2. **Chunk** — Split into ~1000-character chunks with 200-character overlap using recursive character splitting.
 3. **Embed** — Generate vectors via OpenAI `text-embedding-3-small`.
 4. **Store** — Persist chunks + embeddings in MongoDB Atlas (`chunks` collection).
-5. **Retrieve** — Researcher agent rewrites follow-up questions, then Librarian embeds the query and fetches top-5 similar chunks via Atlas Vector Search (`$vectorSearch` aggregation), filtered by `user_id` (and optionally `document_ids`) with cosine similarity threshold. Long contexts are summarized by the Summarizer agent.
+5. **Retrieve** — Hybrid search: Researcher agent rewrites follow-up questions, then Librarian runs both Atlas Vector Search (`$vectorSearch`) and MongoDB full-text keyword search (`$text`), merges results via Reciprocal Rank Fusion (RRF), and reranks with GPT-4o-mini. Results are filtered by `org_id` or `user_id` (and optionally `document_ids`) with cosine similarity threshold. Long contexts are summarized by the Summarizer agent.
 6. **Generate** — Writer agent sends question + retrieved context to GPT-4o with a system prompt that enforces citation. Supports streaming with real-time agent status events.
+7. **Cache** — Non-streaming responses are cached in Redis keyed by `(user_id, question, document_ids)`. Cache is invalidated on document upload/delete via a generation counter.
 
 ## Features
 
@@ -482,16 +627,25 @@ Agents communicate via a tool-based protocol: each agent registers named tools, 
 - **User authentication** — JWT-based registration, login, and session management with MongoDB. Refresh token rotation with SHA-256 hashed storage.
 - **Conversation persistence** — Chat history persists server-side in MongoDB, scoped per user. Conversations are auto-created on first message and listed in the sidebar.
 - **Conversation-aware retrieval** — Follow-up questions are rewritten to standalone queries for better retrieval.
-- **Document management** — Upload, list, and delete documents with optimistic UI updates. All documents are user-scoped.
-- **Document scoping** — Optionally restrict chat retrieval to specific documents via `document_ids`.
-- **Background ingestion** — Persistent MongoDB-based ingestion queue with configurable retries, dead-letter handling, and crash recovery. Upload returns immediately.
+- **Document management** — Upload, list, and delete documents with optimistic UI updates. Documents are scoped to the user's organization (if any) or to the individual user.
+- **Document scoping** — Optionally restrict chat retrieval to specific documents via `document_ids`. Backend validates ownership — users can only scope to documents they own or that belong to their organization.
+- **Background ingestion** — Persistent MongoDB-based ingestion queue with exponential backoff retries (30s → 60s → 120s, capped at 10min), dead-letter handling, scheduled retry timestamps, and crash recovery. Upload returns immediately. WebSocket notifications on completion.
+- **Hybrid search + reranking** — Retrieval combines Atlas Vector Search (semantic) with MongoDB `$text` keyword search, merged via Reciprocal Rank Fusion (RRF). Results are then reranked by GPT-4o-mini for relevance. Both features degrade gracefully if unavailable.
+- **Query caching** — Redis caching layer for repeated queries with generation-based invalidation on document changes. Legal teams often ask the same questions — cached responses are served instantly.
+- **WebSocket ingestion notifications** — Real-time document processing status via WebSocket (`/api/ws/ingestion`), replacing client-side polling.
+- **Multi-tenancy** — Organization-level data isolation. Create organizations, invite members, and share documents across the team. Vector search is scoped to `org_id` when the user belongs to an organization.
 - **DOCX support** — Upload Word documents alongside PDF and TXT.
 - **File validation** — Client-side and server-side type/size checks, filename sanitization, duplicate detection per user.
 - **Responsive UI** — Sidebar collapses on mobile, dark mode support, accessible navigation.
-- **Security** — JWT auth, bcrypt password hashing (SHA-256 pre-hash), refresh token rotation, rate limiting, input length limits, user-scoped data isolation, account lockout after failed logins, Content-Security-Policy headers, path traversal prevention.
-- **Observability** — Structured JSON logging, request ID tracing, deep health checks (MongoDB + OpenAI + agents), per-agent tool call timing.
+- **Security** — JWT auth, bcrypt password hashing (SHA-256 pre-hash), refresh token rotation, rate limiting, input length limits, org/user-scoped data isolation, account lockout after failed logins, Content-Security-Policy headers, path traversal prevention.
+- **Observability** — Structured JSON logging, request ID tracing, deep health checks (MongoDB + OpenAI + Redis + agents), per-agent tool call timing. Prometheus metrics endpoint (`/api/metrics`) for HTTP latency, OpenAI token usage, error rates, and retrieval performance.
+- **Cost tracking** — Per-user OpenAI API usage recorded in MongoDB with estimated cost breakdown by model. Query via `GET /api/usage?month=YYYY-MM`.
+- **Integration tests** — End-to-end `$vectorSearch` tests against the real local MongoDB Docker container (marked `@pytest.mark.integration`), covering user-scoped retrieval, org-scoped retrieval, document-scoped queries (single and multi-doc), score ordering, empty results, keyword search, and RRF merge logic.
 - **Pagination** — Documents and conversations endpoints support paginated responses with configurable page size.
 - **Internationalization** — Full i18n support for English, French, German, and Italian via `next-intl`. URL-based locale routing (`/fr/...`, `/de/...`, `/it/...`), language switcher in sidebar, ICU message format for pluralization, locale-aware date formatting.
+- **Docker deployment** — Production Dockerfiles for backend (Python 3.12-slim) and frontend (Node 18-alpine standalone), with `docker-compose.prod.yml` for full-stack deployment. Non-root users, health checks, volume persistence.
+- **CI/CD** — GitHub Actions pipeline: unit tests, integration tests, lint, Docker image build/push to GHCR, automated database migrations, deploy placeholder.
+- **Database migrations** — Versioned migration scripts tracked in a `_migrations` collection. Runner supports apply and status commands. Runs automatically in CI/CD and as a Docker Compose service.
 
 ## UI Design
 

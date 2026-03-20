@@ -40,6 +40,7 @@ class Orchestrator:
         user_id: str,
         document_ids: list[str] | None = None,
         on_status: StatusCallback | None = None,
+        org_id: str | None = None,
     ) -> tuple[str, list[Source], bool]:
         async def _noop(a: str, s: str) -> None:
             pass
@@ -47,7 +48,7 @@ class Orchestrator:
 
         try:
             return await asyncio.wait_for(
-                self._do_query(question, history, user_id, document_ids, status),
+                self._do_query(question, history, user_id, document_ids, status, org_id),
                 timeout=OVERALL_TIMEOUT,
             )
         except asyncio.TimeoutError:
@@ -61,6 +62,7 @@ class Orchestrator:
         user_id: str,
         document_ids: list[str] | None,
         status: StatusCallback,
+        org_id: str | None = None,
     ) -> tuple[str, list[Source], bool]:
         # Research phase
         await status("researcher", "working")
@@ -70,6 +72,7 @@ class Orchestrator:
             "history": history_dicts,
             "user_id": user_id,
             "document_ids": document_ids,
+            "org_id": org_id,
         })
 
         chunks = research_result["chunks"]
@@ -98,6 +101,7 @@ class Orchestrator:
         user_id: str,
         document_ids: list[str] | None = None,
         on_status: StatusCallback | None = None,
+        org_id: str | None = None,
     ) -> tuple[AsyncGenerator[str, None] | None, list[Source], bool]:
         async def _noop(a: str, s: str) -> None:
             pass
@@ -111,6 +115,7 @@ class Orchestrator:
             "history": history_dicts,
             "user_id": user_id,
             "document_ids": document_ids,
+            "org_id": org_id,
         })
 
         chunks = research_result["chunks"]
@@ -139,7 +144,7 @@ class Orchestrator:
         return _wrapped_stream(), sources, False
 
     async def ingest(
-        self, file_path: str, original_name: str, doc_id: str, content_hash: str, user_id: str,
+        self, file_path: str, original_name: str, doc_id: str, content_hash: str, user_id: str, org_id: str = "",
     ) -> int:
         result = await self._librarian.call_tool("librarian.ingest", {
             "file_path": file_path,
@@ -147,6 +152,7 @@ class Orchestrator:
             "doc_id": doc_id,
             "content_hash": content_hash,
             "user_id": user_id,
+            "org_id": org_id,
         })
         return result["chunk_count"]
 

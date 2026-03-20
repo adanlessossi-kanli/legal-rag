@@ -26,6 +26,7 @@ class ResearcherAgent(BaseAgent):
         user_id = params["user_id"]
         history_raw = params.get("history", [])
         document_ids = params.get("document_ids")
+        org_id = params.get("org_id")
 
         self._validate_string_length(question, "question", 1, 5000, tool)
 
@@ -50,6 +51,7 @@ class ResearcherAgent(BaseAgent):
             "user_id": user_id,
             "document_ids": document_ids,
             "top_k": settings.retrieval_top_k,
+            "org_id": org_id,
         })
         chunks = result["chunks"]
 

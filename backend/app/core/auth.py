@@ -65,3 +65,9 @@ async def get_current_user(token: str | None = Depends(oauth2_scheme)) -> dict:
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     return user
+
+
+def get_org_id(user: dict) -> str | None:
+    """Extract org_id from user dict, returning string or None."""
+    oid = user.get("org_id")
+    return str(oid) if oid else None

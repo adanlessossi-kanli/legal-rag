@@ -8,26 +8,34 @@ from app.core.database import get_db
 logger = logging.getLogger(__name__)
 
 
-async def save_document(doc_id: str, name: str, chunk_count: int, status: str, content_hash: str = "", user_id: str = "") -> None:
+async def save_document(doc_id: str, name: str, chunk_count: int, status: str, content_hash: str = "", user_id: str = "", org_id: str = "") -> None:
     db = get_db()
+    doc = {
+        "doc_id": doc_id,
+        "user_id": ObjectId(user_id) if user_id else None,
+        "name": name,
+        "uploaded_at": datetime.now(timezone.utc),
+        "chunk_count": chunk_count,
+        "status": status,
+        "content_hash": content_hash,
+    }
+    if org_id:
+        doc["org_id"] = ObjectId(org_id)
     await db.documents.update_one(
         {"doc_id": doc_id},
-        {"$set": {
-            "doc_id": doc_id,
-            "user_id": ObjectId(user_id) if user_id else None,
-            "name": name,
-            "uploaded_at": datetime.now(timezone.utc),
-            "chunk_count": chunk_count,
-            "status": status,
-            "content_hash": content_hash,
-        }},
+        {"$set": doc},
         upsert=True,
     )
 
 
-async def get_all_documents(user_id: str) -> list[dict]:
+async def get_all_documents(user_id: str, org_id: str | None = None) -> list[dict]:
     db = get_db()
-    cursor = db.documents.find({"user_id": ObjectId(user_id)})
+    # If user belongs to an org, show all org documents
+    if org_id:
+        query = {"org_id": ObjectId(org_id)}
+    else:
+        query = {"user_id": ObjectId(user_id)}
+    cursor = db.documents.find(query)
     docs = []
     async for doc in cursor:
         docs.append({
@@ -52,6 +60,7 @@ async def get_document(doc_id: str) -> dict | None:
         "chunk_count": doc["chunk_count"],
         "status": doc["status"],
         "user_id": str(doc.get("user_id", "")),
+        "org_id": str(doc.get("org_id", "")) if doc.get("org_id") else None,
     }
 
 

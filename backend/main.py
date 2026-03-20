@@ -11,10 +11,12 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from app.api import auth, chat, conversations, documents, health, upload
+from app.api import auth, chat, conversations, documents, health, metrics, organizations, upload, ws
+from app.core.cache import close_cache, connect_cache
 from app.core.config import settings
 from app.core.database import close_db, connect_db
 from app.core.ingestion_queue import start_worker, stop_worker
+from app.core.metrics import PrometheusMiddleware
 from app.core.security import SecurityHeadersMiddleware
 
 handler = logging.StreamHandler()
@@ -29,6 +31,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await connect_db()
+    await connect_cache()
     await start_worker()
 
     from app.agents import create_orchestrator
@@ -38,6 +41,7 @@ async def lifespan(app: FastAPI):
     yield
     await app.state.orchestrator.shutdown()
     await stop_worker()
+    await close_cache()
     await close_db()
     logger.info("Shutting down Legal RAG API")
 
@@ -47,6 +51,7 @@ app = FastAPI(title="Legal RAG API", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+app.add_middleware(PrometheusMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 
 app.add_middleware(
@@ -91,3 +96,6 @@ app.include_router(chat.router, prefix="/api")
 app.include_router(upload.router, prefix="/api")
 app.include_router(documents.router, prefix="/api")
 app.include_router(conversations.router, prefix="/api")
+app.include_router(metrics.router, prefix="/api")
+app.include_router(organizations.router, prefix="/api")
+app.include_router(ws.router, prefix="/api")

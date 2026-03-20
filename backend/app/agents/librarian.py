@@ -36,6 +36,7 @@ class LibrarianAgent(BaseAgent):
         user_id = params["user_id"]
         document_ids = params.get("document_ids")
         top_k = params.get("top_k", settings.retrieval_top_k)
+        org_id = params.get("org_id")
 
         self._validate_string_length(query, "query", 1, 5000, tool)
         self._validate_int_range(top_k, "top_k", 1, 20, tool)
@@ -43,8 +44,8 @@ class LibrarianAgent(BaseAgent):
         if document_ids and len(document_ids) > 50:
             raise AgentError("VALIDATION_ERROR", "document_ids max 50 items", self.name, tool)
 
-        # Use existing vectorstore retrieve (handles embedding + vector search)
-        chunks = await retrieve(query, user_id, document_ids)
+        # Use org_id for retrieval scope if available, otherwise fall back to user_id
+        chunks = await retrieve(query, user_id, document_ids, org_id=org_id)
         return {
             "chunks": [
                 {
@@ -66,6 +67,7 @@ class LibrarianAgent(BaseAgent):
         doc_id = params["doc_id"]
         content_hash = params["content_hash"]
         user_id = params["user_id"]
+        org_id = params.get("org_id", "")
 
         # Path traversal prevention
         upload_dir = Path(settings.upload_dir).resolve()
@@ -78,14 +80,16 @@ class LibrarianAgent(BaseAgent):
 
         self._validate_string_length(original_name, "original_name", 1, 255, tool)
 
-        await save_document(doc_id, original_name, 0, "processing", content_hash, user_id)
+        await save_document(doc_id, original_name, 0, "processing", content_hash, user_id, org_id)
         try:
             pages = load_document(file_path)
             chunks = chunk_pages(pages, doc_id)
             for c in chunks:
                 c.metadata["user_id"] = user_id
+                if org_id:
+                    c.metadata["org_id"] = org_id
             await store_chunks(chunks)
-            await save_document(doc_id, original_name, len(chunks), "ready", content_hash, user_id)
+            await save_document(doc_id, original_name, len(chunks), "ready", content_hash, user_id, org_id)
             self.logger.info("Ingested %s: %d chunks", original_name, len(chunks))
             return {"chunk_count": len(chunks)}
         except Exception as e:
