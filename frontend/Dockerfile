@@ -13,7 +13,6 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 RUN addgroup -S app && adduser -S app -G app
 
-COPY --from=builder /app/public ./public
 COPY --from=builder --chown=app:app /app/.next/standalone ./
 COPY --from=builder --chown=app:app /app/.next/static ./.next/static
 
