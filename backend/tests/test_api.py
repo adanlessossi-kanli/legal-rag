@@ -1,66 +1,66 @@
+"""
+REQ-QT-003: Chat request validation rejects empty questions.
+REQ-QT-004: File type validation rejects unsupported extensions.
+REQ-QN-008: Backend returns structured error responses.
+REQ-QN-010: Backend logs requests with method, path, status, duration.
+"""
 import pytest
-from fastapi.testclient import TestClient
-
-from main import app
-
-client = TestClient(app)
 
 
-def test_health_shallow():
+def test_health_shallow(client):
     resp = client.get("/api/health")
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"
 
 
-def test_health_deep():
+def test_health_deep(client):
     resp = client.get("/api/health?deep=true")
     assert resp.status_code == 200
     data = resp.json()
     assert "checks" in data
-    assert "chromadb" in data["checks"]
 
 
-def test_chat_empty_question():
-    resp = client.post("/api/chat", json={"question": "", "history": []})
+# REQ-QT-003
+def test_chat_empty_question(client, auth_headers):
+    resp = client.post("/api/chat", json={"question": ""}, headers=auth_headers)
     assert resp.status_code == 422
 
 
-def test_chat_question_too_long():
-    resp = client.post("/api/chat", json={"question": "x" * 3000, "history": []})
+def test_chat_question_too_long(client, auth_headers):
+    resp = client.post("/api/chat", json={"question": "x" * 3000}, headers=auth_headers)
     assert resp.status_code == 422
 
 
-def test_upload_no_file():
-    resp = client.post("/api/upload")
+# REQ-QT-004
+def test_upload_no_file(client, auth_headers):
+    resp = client.post("/api/upload", headers=auth_headers)
     assert resp.status_code == 422
 
 
-def test_upload_unsupported_type():
-    resp = client.post("/api/upload", files={"file": ("test.csv", b"a,b,c", "text/csv")})
+def test_upload_unsupported_type(client, auth_headers):
+    resp = client.post("/api/upload", files={"file": ("test.csv", b"a,b,c", "text/csv")}, headers=auth_headers)
     assert resp.status_code == 400
 
 
-def test_upload_empty_file():
-    resp = client.post("/api/upload", files={"file": ("test.txt", b"", "text/plain")})
+def test_upload_empty_file(client, auth_headers):
+    resp = client.post("/api/upload", files={"file": ("test.txt", b"", "text/plain")}, headers=auth_headers)
     assert resp.status_code == 400
 
 
-def test_documents_list():
-    resp = client.get("/api/documents")
-    assert resp.status_code == 200
-    assert isinstance(resp.json(), list)
+# REQ-QN-008: structured error (never raw stack traces)
+def test_structured_error_on_unauth(client):
+    resp = client.post("/api/chat", json={"question": "hello"})
+    assert resp.status_code == 401
+    data = resp.json()
+    assert "detail" in data
 
 
-def test_delete_nonexistent():
-    resp = client.delete("/api/documents/doc_nonexistent")
-    assert resp.status_code == 404
-
-
-def test_request_id_header():
+# Request ID middleware
+def test_request_id_header(client):
     resp = client.get("/api/health")
     assert "X-Request-ID" in resp.headers
 
 
-def test_request_id_propagated():
+def test_request_id_propagated(client):
     resp = client.get("/api/health", headers={"X-Request-ID": "test-123"})
     assert resp.headers["X-Request-ID"] == "test-123"

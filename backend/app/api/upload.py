@@ -22,7 +22,10 @@ MAX_SIZE_BYTES = 50 * 1024 * 1024
 
 
 def _sanitize_filename(name: str) -> str:
-    return re.sub(r"[^\w.\-]", "_", name)
+    name = re.sub(r"[^\w.\-]", "_", name)
+    # Collapse consecutive dots to prevent path traversal
+    name = re.sub(r"\.{2,}", "_", name)
+    return name
 
 
 async def _read_with_limit(file: UploadFile, max_bytes: int) -> bytes:

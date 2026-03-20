@@ -92,7 +92,6 @@ This uses the [`mongodb-atlas-local`](https://hub.docker.com/r/mongodb/mongodb-a
 Then create the vector search index:
 
 ```bash
-cd backend
 python scripts/create_vector_index.py
 ```
 
@@ -184,6 +183,18 @@ Frontend runs at `http://localhost:3000`.
 cd backend
 pytest tests/ -v
 ```
+
+All tests mock OpenAI calls and use an in-memory MongoDB (via `mongomock-motor`), so no external services are needed.
+
+Test modules:
+- `test_chunker.py` — chunk count, overlap, size limits
+- `test_loader.py` — PDF, TXT, DOCX text extraction
+- `test_metadata.py` — document metadata CRUD round-trips
+- `test_api.py` — validation, health checks, request ID middleware
+- `test_auth.py` — register, login, refresh token rotation, JWT
+- `test_chat.py` — chat responses with sources, conversation persistence
+- `test_upload.py` — file upload, type/size validation, filename sanitization
+- `test_documents.py` — document listing (user-scoped), delete with chunk cleanup
 
 ## Configuration
 
@@ -340,7 +351,17 @@ legal-rag/
 │   │       ├── pipeline.py #   Orchestration (ingest, query, remove)
 │   │       └── vectorstore.py  # MongoDB Atlas Vector Search
 │   ├── tests/
+│   │   ├── conftest.py     #   Fixtures: mock MongoDB, auth helpers
+│   │   ├── test_api.py     #   Validation, health, middleware
+│   │   ├── test_auth.py    #   Register, login, JWT, refresh
+│   │   ├── test_chat.py    #   Chat responses, conversations
+│   │   ├── test_chunker.py #   Chunk count, overlap, size
+│   │   ├── test_documents.py # List, delete (user-scoped)
+│   │   ├── test_loader.py  #   PDF/TXT/DOCX loading
+│   │   ├── test_metadata.py#   Metadata CRUD round-trips
+│   │   └── test_upload.py  #   Upload, validation, sanitization
 │   ├── main.py             # FastAPI entrypoint
+│   ├── pytest.ini          # Pytest configuration
 │   ├── requirements.txt
 │   └── .env.example
 ├── frontend/
