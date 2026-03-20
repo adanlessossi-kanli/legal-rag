@@ -1,24 +1,32 @@
 import logging
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.auth import get_current_user
+from app.core.config import settings
 from app.core.database import get_db
-from app.models.schemas import ConversationDetail, ConversationSummary, DeleteResponse, MessageOut
+from app.models.schemas import ConversationDetail, ConversationSummary, DeleteResponse, MessageOut, PaginatedConversations
 
 logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
-@router.get("/conversations", response_model=list[ConversationSummary])
-async def list_conversations(user: dict = Depends(get_current_user)):
+@router.get("/conversations", response_model=PaginatedConversations)
+async def list_conversations(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(None),
+    user: dict = Depends(get_current_user),
+):
+    ps = min(page_size or settings.default_page_size, settings.max_page_size)
     db = get_db()
-    cursor = db.conversations.find({"user_id": user["_id"]}).sort("updated_at", -1)
-    convos = []
+    total = await db.conversations.count_documents({"user_id": user["_id"]})
+    skip = (page - 1) * ps
+    cursor = db.conversations.find({"user_id": user["_id"]}).sort("updated_at", -1).skip(skip).limit(ps)
+    items = []
     async for c in cursor:
-        convos.append(ConversationSummary(id=str(c["_id"]), title=c["title"], updated_at=c["updated_at"]))
-    return convos
+        items.append(ConversationSummary(id=str(c["_id"]), title=c["title"], updated_at=c["updated_at"]))
+    return PaginatedConversations(items=items, total=total, page=page, page_size=ps)
 
 
 @router.get("/conversations/{conversation_id}", response_model=ConversationDetail)

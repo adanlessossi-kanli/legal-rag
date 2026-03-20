@@ -21,6 +21,19 @@ class Settings(BaseSettings):
     enable_query_rewriting: bool = True
     log_format: str = "json"
 
+    # Security
+    max_login_attempts: int = 5
+    lockout_duration_minutes: int = 15
+    enable_csp: bool = True
+
+    # Pagination
+    default_page_size: int = 20
+    max_page_size: int = 100
+
+    # Ingestion queue
+    ingestion_max_retries: int = 3
+    ingestion_retry_delay_seconds: int = 30
+
     # MongoDB
     mongodb_host: str = "localhost"
     mongodb_port: int = 27017

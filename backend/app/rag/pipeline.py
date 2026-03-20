@@ -13,13 +13,17 @@ from app.rag.vectorstore import delete_by_doc_id, retrieve, store_chunks
 
 logger = logging.getLogger(__name__)
 
+NO_CONTEXT_ANSWER = (
+    "I couldn't find relevant information in your uploaded documents to answer this question. "
+    "Try uploading more documents or rephrasing your question."
+)
+
 
 async def ingest(file_path: str, original_name: str, doc_id: str, content_hash: str, user_id: str = "") -> int:
     await save_document(doc_id, original_name, 0, "processing", content_hash, user_id)
     try:
         pages = load_document(file_path)
         chunks = chunk_pages(pages, doc_id)
-        # Tag chunks with user_id
         for c in chunks:
             c.metadata["user_id"] = user_id
         await store_chunks(chunks)
@@ -37,19 +41,23 @@ async def _resolve_query(question: str, history: list[ChatMessage]) -> str:
     return question
 
 
-async def query(question: str, history: list[ChatMessage], user_id: str = "") -> tuple[str, list[Source]]:
+async def query(question: str, history: list[ChatMessage], user_id: str = "", document_ids: list[str] | None = None) -> tuple[str, list[Source], bool]:
     search_query = await _resolve_query(question, history)
-    chunks = await retrieve(search_query, user_id)
+    chunks = await retrieve(search_query, user_id, document_ids)
+    if not chunks:
+        return NO_CONTEXT_ANSWER, [], True
     answer = await generate(question, chunks, history)
     sources = _build_sources(chunks)
-    return answer, sources
+    return answer, sources, False
 
 
-async def query_stream(question: str, history: list[ChatMessage], user_id: str = "") -> tuple[AsyncGenerator[str, None], list[Source]]:
+async def query_stream(question: str, history: list[ChatMessage], user_id: str = "", document_ids: list[str] | None = None) -> tuple[AsyncGenerator[str, None] | None, list[Source], bool]:
     search_query = await _resolve_query(question, history)
-    chunks = await retrieve(search_query, user_id)
+    chunks = await retrieve(search_query, user_id, document_ids)
+    if not chunks:
+        return None, [], True
     sources = _build_sources(chunks)
-    return generate_stream(question, chunks, history), sources
+    return generate_stream(question, chunks, history), sources, False
 
 
 def _build_sources(chunks: list[dict]) -> list[Source]:
