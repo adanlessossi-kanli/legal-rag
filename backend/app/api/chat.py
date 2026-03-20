@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -12,7 +13,7 @@ from app.core.auth import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.schemas import ChatMessage, ChatRequest, ChatResponse, Source
-from app.rag.pipeline import query, query_stream
+from app.rag.pipeline import NO_CONTEXT_ANSWER, query, query_stream
 
 logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(get_current_user)])
@@ -67,7 +68,6 @@ async def chat(request: Request, req: ChatRequest, user: dict = Depends(get_curr
     user_id = user["_id"]
     stream = request.query_params.get("stream", "").lower() == "true"
 
-    # Resolve conversation
     conversation_id = req.conversation_id
     if conversation_id:
         history = await _load_history(conversation_id, user_id)
@@ -75,35 +75,58 @@ async def chat(request: Request, req: ChatRequest, user: dict = Depends(get_curr
         conversation_id = await _create_conversation(user_id, req.question)
         history = []
 
-    # Save user message
     await _save_message(conversation_id, user_id, "user", req.question)
 
     try:
         if stream:
-            return await _stream_response(req.question, history, conversation_id, user_id)
-        answer, sources = await query(req.question, history, str(user_id))
+            return await _stream_response(req.question, history, conversation_id, user_id, req.document_ids)
+        answer, sources, no_context = await query(req.question, history, str(user_id), req.document_ids)
         await _save_message(conversation_id, user_id, "assistant", answer, sources)
-        return ChatResponse(answer=answer, sources=sources, conversation_id=conversation_id)
+        return ChatResponse(answer=answer, sources=sources, conversation_id=conversation_id, no_context=no_context)
     except Exception:
         logger.exception("Chat failed")
         raise HTTPException(status_code=500, detail="Failed to generate answer")
 
 
-async def _stream_response(question: str, history: list, conversation_id: str, user_id: ObjectId) -> StreamingResponse:
-    token_gen, sources = await query_stream(question, history, str(user_id))
+async def _stream_response(question: str, history: list, conversation_id: str, user_id: ObjectId, document_ids: list[str] | None = None) -> StreamingResponse:
+    status_queue: asyncio.Queue = asyncio.Queue()
+
+    async def on_status(agent: str, status: str) -> None:
+        await status_queue.put({"type": "agent_status", "agent": agent, "status": status})
+
+    token_gen, sources, no_context = await query_stream(question, history, str(user_id), document_ids, on_status)
 
     async def event_stream():
+        # Drain any status events emitted during research phase
+        while not status_queue.empty():
+            evt = await status_queue.get()
+            yield f"data: {json.dumps(evt)}\n\n"
+
         sources_data = [s.model_dump() for s in sources]
         yield f"data: {json.dumps({'type': 'sources', 'sources': sources_data})}\n\n"
+
+        # Drain status events emitted after sources (writer working)
+        while not status_queue.empty():
+            evt = await status_queue.get()
+            yield f"data: {json.dumps(evt)}\n\n"
+
         yield f"data: {json.dumps({'type': 'conversation_id', 'conversation_id': conversation_id})}\n\n"
 
-        full_answer = []
-        async for token in token_gen:
-            full_answer.append(token)
-            yield f"data: {json.dumps({'type': 'token', 'token': token})}\n\n"
+        if no_context:
+            yield f"data: {json.dumps({'type': 'token', 'token': NO_CONTEXT_ANSWER})}\n\n"
+            await _save_message(conversation_id, user_id, "assistant", NO_CONTEXT_ANSWER, [])
+        else:
+            full_answer = []
+            async for token in token_gen:
+                full_answer.append(token)
+                yield f"data: {json.dumps({'type': 'token', 'token': token})}\n\n"
+            await _save_message(conversation_id, user_id, "assistant", "".join(full_answer), sources)
 
-        # Save assistant message after streaming completes
-        await _save_message(conversation_id, user_id, "assistant", "".join(full_answer), sources)
+        # Drain final status events (done)
+        while not status_queue.empty():
+            evt = await status_queue.get()
+            yield f"data: {json.dumps(evt)}\n\n"
+
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

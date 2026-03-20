@@ -18,6 +18,19 @@ from mongomock_motor import AsyncMongoMockClient
 from app.core.auth import create_access_token, hash_password
 
 
+# --- Orchestrator mock ---
+
+@pytest.fixture(autouse=True)
+async def _init_orchestrator():
+    """Initialize the orchestrator for tests that hit API endpoints."""
+    from app.agents import create_orchestrator, _orchestrator
+    import app.agents as agents_mod
+    if agents_mod._orchestrator is None:
+        await create_orchestrator()
+    yield
+    # Don't tear down — reuse across tests
+
+
 # --- MongoDB mock ---
 
 _mock_client = AsyncMongoMockClient()

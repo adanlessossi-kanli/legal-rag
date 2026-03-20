@@ -47,10 +47,16 @@ async def store_chunks(chunks: list[Chunk]) -> None:
     logger.info("Stored %d chunks in MongoDB", len(chunks))
 
 
-async def retrieve(question: str, user_id: str = "") -> list[dict]:
+async def retrieve(question: str, user_id: str = "", document_ids: list[str] | None = None) -> list[dict]:
     start = time.time()
     db = get_db()
     q_embedding = (await _embed([question]))[0]
+
+    vs_filter = {}
+    if user_id:
+        vs_filter["user_id"] = user_id
+    if document_ids:
+        vs_filter["doc_id"] = {"$in": document_ids}
 
     pipeline = [
         {
@@ -60,7 +66,8 @@ async def retrieve(question: str, user_id: str = "") -> list[dict]:
                 "queryVector": q_embedding,
                 "numCandidates": settings.retrieval_top_k * 10,
                 "limit": settings.retrieval_top_k,
-                **({"filter": {"user_id": user_id}} if user_id else {}),
+                **({
+                    "filter": vs_filter} if vs_filter else {}),
             }
         },
         {

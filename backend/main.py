@@ -14,6 +14,8 @@ from slowapi.util import get_remote_address
 from app.api import auth, chat, conversations, documents, health, upload
 from app.core.config import settings
 from app.core.database import close_db, connect_db
+from app.core.ingestion_queue import start_worker, stop_worker
+from app.core.security import SecurityHeadersMiddleware
 
 handler = logging.StreamHandler()
 if settings.log_format == "json":
@@ -27,8 +29,15 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await connect_db()
+    await start_worker()
+
+    from app.agents import create_orchestrator
+    app.state.orchestrator = await create_orchestrator()
+
     logger.info("Starting Legal RAG API")
     yield
+    await app.state.orchestrator.shutdown()
+    await stop_worker()
     await close_db()
     logger.info("Shutting down Legal RAG API")
 
@@ -37,6 +46,8 @@ limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="Legal RAG API", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

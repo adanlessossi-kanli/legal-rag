@@ -21,6 +21,24 @@ class Settings(BaseSettings):
     enable_query_rewriting: bool = True
     log_format: str = "json"
 
+    # Multi-agent
+    researcher_summarize_threshold: int = 10000
+    summarizer_model: str = "gpt-4o-mini"
+    summarizer_max_length: int = 500
+
+    # Security
+    max_login_attempts: int = 5
+    lockout_duration_minutes: int = 15
+    enable_csp: bool = True
+
+    # Pagination
+    default_page_size: int = 20
+    max_page_size: int = 100
+
+    # Ingestion queue
+    ingestion_max_retries: int = 3
+    ingestion_retry_delay_seconds: int = 30
+
     # MongoDB
     mongodb_host: str = "localhost"
     mongodb_port: int = 27017

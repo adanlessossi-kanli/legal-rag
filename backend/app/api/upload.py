@@ -3,15 +3,16 @@ import re
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from app.core.auth import get_current_user
 from app.core.config import settings
-from app.core.metadata import find_by_hash, save_document, update_status
+from app.core.ingestion_queue import enqueue
+from app.core.metadata import find_by_hash, save_document
 from app.models.schemas import UploadResponse
-from app.rag.pipeline import compute_hash, ingest
+from app.rag.pipeline import compute_hash
 
 logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(get_current_user)])
@@ -39,17 +40,9 @@ async def _read_with_limit(file: UploadFile, max_bytes: int) -> bytes:
     return b"".join(chunks)
 
 
-async def _background_ingest(file_path: str, original_name: str, doc_id: str, content_hash: str, user_id: str) -> None:
-    try:
-        await ingest(file_path, original_name, doc_id, content_hash, user_id)
-    except Exception:
-        logger.exception("Background ingestion failed for %s", doc_id)
-        await update_status(doc_id, "error")
-
-
 @router.post("/upload", response_model=UploadResponse)
 @limiter.limit(settings.rate_limit_upload)
-async def upload(request: Request, file: UploadFile, background_tasks: BackgroundTasks, user: dict = Depends(get_current_user)):
+async def upload(request: Request, file: UploadFile, user: dict = Depends(get_current_user)):
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
 
@@ -75,6 +68,6 @@ async def upload(request: Request, file: UploadFile, background_tasks: Backgroun
     file_path.write_bytes(content)
 
     await save_document(doc_id, file.filename, 0, "processing", content_hash, user_id)
-    background_tasks.add_task(_background_ingest, str(file_path), file.filename, doc_id, content_hash, user_id)
+    await enqueue(str(file_path), file.filename, doc_id, content_hash, user_id)
 
     return UploadResponse(id=doc_id, name=file.filename, chunk_count=0, status="processing")

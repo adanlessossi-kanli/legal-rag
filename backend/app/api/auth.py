@@ -68,12 +68,20 @@ async def register(req: RegisterRequest):
 
 @router.post("/login", response_model=AuthResponse)
 async def login(req: LoginRequest):
+    from app.core.security import is_account_locked, record_failed_login, clear_login_attempts
+
+    email = req.email.lower()
+    if is_account_locked(email):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Account temporarily locked due to too many failed attempts. Try again later.")
+
     db = get_db()
-    user = await db.users.find_one({"email": req.email.lower()})
+    user = await db.users.find_one({"email": email})
 
     if not user or not verify_password(req.password, user["password_hash"]):
+        record_failed_login(email)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
 
+    clear_login_attempts(email)
     return await _issue_tokens(user)
 
 

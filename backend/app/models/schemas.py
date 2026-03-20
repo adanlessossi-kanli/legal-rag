@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, EmailStr, field_validator
 
@@ -69,6 +69,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     question: str
     conversation_id: str | None = None
+    document_ids: list[str] | None = None
     history: list[ChatMessage] = []
 
     @field_validator("question")
@@ -92,6 +93,7 @@ class ChatResponse(BaseModel):
     answer: str
     sources: list[Source]
     conversation_id: str | None = None
+    no_context: bool = False
 
 
 # --- Documents ---
@@ -102,6 +104,13 @@ class DocumentInfo(BaseModel):
     uploaded_at: datetime
     chunk_count: int
     status: Literal["processing", "ready", "error"]
+
+
+class PaginatedDocuments(BaseModel):
+    items: list[DocumentInfo]
+    total: int
+    page: int
+    page_size: int
 
 
 class UploadResponse(BaseModel):
@@ -119,7 +128,7 @@ class DeleteResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
-    checks: dict[str, str] | None = None
+    checks: dict[str, Any] | None = None
 
 
 # --- Conversations ---
@@ -128,6 +137,13 @@ class ConversationSummary(BaseModel):
     id: str
     title: str
     updated_at: datetime
+
+
+class PaginatedConversations(BaseModel):
+    items: list[ConversationSummary]
+    total: int
+    page: int
+    page_size: int
 
 
 class MessageOut(BaseModel):

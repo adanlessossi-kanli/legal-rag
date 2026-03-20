@@ -54,7 +54,7 @@ async def test_list_documents_returns_user_scoped(client, auth_headers):
 
     resp = client.get("/api/documents", headers=auth_headers)
     assert resp.status_code == 200
-    ids = [d["id"] for d in resp.json()]
+    ids = [d["id"] for d in resp.json()["items"]]
     assert "doc_mine" in ids
     assert "doc_other" not in ids
 
