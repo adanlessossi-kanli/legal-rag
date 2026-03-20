@@ -15,6 +15,7 @@ import os
 import time
 
 import pytest
+import pytest_asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
 
 MONGO_URI = os.getenv("TEST_MONGODB_URI", "mongodb://localhost:27017/?directConnection=true")
@@ -22,7 +23,10 @@ DB_NAME = "legal_rag_integration_test"
 COLLECTION = "chunks"
 INDEX_NAME = "vector_index"
 
-pytestmark = pytest.mark.integration
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.asyncio(loop_scope="module"),
+]
 
 
 def _is_mongo_available() -> bool:
@@ -42,14 +46,7 @@ skip_no_mongo = pytest.mark.skipif(
 )
 
 
-@pytest.fixture(scope="module")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
-
-
-@pytest.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def db():
     client = AsyncIOMotorClient(MONGO_URI)
     database = client[DB_NAME]
@@ -58,7 +55,7 @@ async def db():
     client.close()
 
 
-@pytest.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def setup_index(db):
     """Create the vector search index on the test database."""
     from pymongo import MongoClient
