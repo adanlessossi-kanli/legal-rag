@@ -1,0 +1,119 @@
+{
+  "common": {
+    "appName": "Legal RAG",
+    "appTagline": "KI-Dokumentenassistent",
+    "appTitle": "Legal RAG — KI-Assistent für Rechtsdokumente",
+    "appDescription": "Laden Sie Verträge, Richtlinien oder beliebige Rechtstexte hoch — stellen Sie dann Fragen in natürlicher Sprache und erhalten Sie fundierte Antworten mit Quellenangaben.",
+    "nav": {
+      "newChat": "Neuer Chat",
+      "upload": "Hochladen",
+      "documents": "Dokumente"
+    },
+    "recent": "Kürzlich",
+    "signOut": "Abmelden",
+    "openNav": "Navigation öffnen",
+    "closeNav": "Navigation schließen",
+    "closeNavOverlay": "Navigationsbereich schließen"
+  },
+  "auth": {
+    "login": {
+      "title": "Bei Legal RAG anmelden",
+      "subtitle": "Geben Sie Ihre Zugangsdaten ein, um fortzufahren",
+      "emailLabel": "E-Mail",
+      "emailPlaceholder": "sie@beispiel.de",
+      "passwordLabel": "Passwort",
+      "passwordPlaceholder": "••••••••",
+      "submit": "Anmelden",
+      "submitting": "Anmeldung läuft...",
+      "noAccount": "Noch kein Konto?",
+      "signUpLink": "Registrieren",
+      "failed": "Anmeldung fehlgeschlagen"
+    },
+    "register": {
+      "title": "Konto erstellen",
+      "subtitle": "Starten Sie mit Legal RAG",
+      "nameLabel": "Name",
+      "namePlaceholder": "Max Mustermann",
+      "emailLabel": "E-Mail",
+      "emailPlaceholder": "sie@beispiel.de",
+      "passwordLabel": "Passwort",
+      "passwordPlaceholder": "Min. 8 Zeichen, Groß- + Kleinbuchstaben + Ziffer",
+      "submit": "Konto erstellen",
+      "submitting": "Konto wird erstellt...",
+      "hasAccount": "Bereits ein Konto?",
+      "signInLink": "Anmelden",
+      "failed": "Registrierung fehlgeschlagen"
+    }
+  },
+  "chat": {
+    "title": "Chat",
+    "subtitle": "Stellen Sie Fragen zu Ihren Rechtsdokumenten",
+    "newChat": "Neuer Chat",
+    "inputPlaceholder": "Stellen Sie eine rechtliche Frage...",
+    "sendLabel": "Nachricht senden",
+    "inputLabel": "Nachrichteneingabe",
+    "allDocuments": "Alle Dokumente",
+    "scopedDocuments": "{count, plural, one {1 Dokument} other {# Dokumente}} ausgewählt",
+    "disclaimer": "Antworten werden von KI aus Ihren hochgeladenen Dokumenten generiert. Überprüfen Sie stets kritische Rechtsinformationen.",
+    "failedToLoad": "Konversation konnte nicht geladen werden",
+    "somethingWentWrong": "Etwas ist schiefgelaufen",
+    "emptyState": {
+      "title": "Fragen Sie zu Ihren Rechtsdokumenten",
+      "description": "Laden Sie Verträge, Richtlinien oder Rechtstexte hoch — stellen Sie dann Fragen in natürlicher Sprache. Erhalten Sie fundierte Antworten mit Quellenangaben."
+    },
+    "exampleQueries": {
+      "termination": "Was sind die Kündigungsklauseln?",
+      "liability": "Fassen Sie den Haftungsabschnitt zusammen",
+      "payment": "Was sind die Zahlungsbedingungen?"
+    },
+    "hideSources": "Quellen ausblenden",
+    "sourceCount": "{count, plural, one {1 Quelle} other {# Quellen}}",
+    "agents": {
+      "researcher": "Recherche läuft",
+      "writer": "Schreibt",
+      "summarizer": "Zusammenfassung"
+    }
+  },
+  "upload": {
+    "title": "Dokumente hochladen",
+    "subtitle": "Fügen Sie Rechtsdokumente zu Ihrer Wissensbasis für KI-gestützte Fragen und Antworten hinzu",
+    "processing": "Dokumente werden verarbeitet...",
+    "status": {
+      "processing": "Verarbeitung...",
+      "chunks": "{count} Abschnitte"
+    },
+    "failed": "Hochladen fehlgeschlagen",
+    "dropzone": {
+      "label": "Dateien per Drag-and-Drop oder Klick hochladen",
+      "text": "Dateien hier ablegen oder <browse>durchsuchen</browse>",
+      "hint": "{types} — Max. {maxSize} MB pro Datei",
+      "unsupportedType": "Nicht unterstützter Dateityp: {ext}",
+      "tooLarge": "Datei zu groß: {name} (max. {maxSize} MB)"
+    }
+  },
+  "documents": {
+    "title": "Dokumente",
+    "loading": "Wird geladen...",
+    "documentCount": "{count, plural, =0 {Keine Dokumente} one {1 Dokument} other {# Dokumente}} in Ihrer Wissensbasis",
+    "deleteFailed": "Löschen fehlgeschlagen",
+    "columns": {
+      "document": "Dokument",
+      "date": "Datum",
+      "chunks": "Abschnitte",
+      "status": "Status",
+      "actions": "Aktionen"
+    },
+    "confirm": "Bestätigen",
+    "cancel": "Abbrechen",
+    "deleteLabel": "{name} löschen",
+    "empty": {
+      "title": "Noch keine Dokumente",
+      "description": "Laden Sie Dokumente hoch, um Fragen zu stellen"
+    }
+  },
+  "errors": {
+    "somethingWentWrong": "Etwas ist schiefgelaufen",
+    "refreshHint": "Bitte aktualisieren Sie die Seite, um es erneut zu versuchen.",
+    "refreshPage": "Seite aktualisieren"
+  }
+}
