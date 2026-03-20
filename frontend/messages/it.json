@@ -1,0 +1,119 @@
+{
+  "common": {
+    "appName": "Legal RAG",
+    "appTagline": "Assistente documentale IA",
+    "appTitle": "Legal RAG — Assistente IA per documenti legali",
+    "appDescription": "Carica contratti, policy o qualsiasi testo legale — poi fai domande in linguaggio naturale e ottieni risposte fondate con citazioni delle fonti.",
+    "nav": {
+      "newChat": "Nuova chat",
+      "upload": "Carica",
+      "documents": "Documenti"
+    },
+    "recent": "Recenti",
+    "signOut": "Esci",
+    "openNav": "Apri navigazione",
+    "closeNav": "Chiudi navigazione",
+    "closeNavOverlay": "Chiudi pannello di navigazione"
+  },
+  "auth": {
+    "login": {
+      "title": "Accedi a Legal RAG",
+      "subtitle": "Inserisci le tue credenziali per continuare",
+      "emailLabel": "E-mail",
+      "emailPlaceholder": "tu@esempio.com",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "••••••••",
+      "submit": "Accedi",
+      "submitting": "Accesso in corso...",
+      "noAccount": "Non hai un account?",
+      "signUpLink": "Registrati",
+      "failed": "Accesso non riuscito"
+    },
+    "register": {
+      "title": "Crea il tuo account",
+      "subtitle": "Inizia con Legal RAG",
+      "nameLabel": "Nome",
+      "namePlaceholder": "Mario Rossi",
+      "emailLabel": "E-mail",
+      "emailPlaceholder": "tu@esempio.com",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "Min 8 car., maiuscola + minuscola + cifra",
+      "submit": "Crea account",
+      "submitting": "Creazione account...",
+      "hasAccount": "Hai già un account?",
+      "signInLink": "Accedi",
+      "failed": "Registrazione non riuscita"
+    }
+  },
+  "chat": {
+    "title": "Chat",
+    "subtitle": "Fai domande sui tuoi documenti legali",
+    "newChat": "Nuova chat",
+    "inputPlaceholder": "Fai una domanda legale...",
+    "sendLabel": "Invia messaggio",
+    "inputLabel": "Campo di inserimento messaggio",
+    "allDocuments": "Tutti i documenti",
+    "scopedDocuments": "{count, plural, one {1 documento} other {# documenti}} selezionato/i",
+    "disclaimer": "Le risposte sono generate dall'IA a partire dai tuoi documenti caricati. Verifica sempre le informazioni legali critiche.",
+    "failedToLoad": "Impossibile caricare la conversazione",
+    "somethingWentWrong": "Qualcosa è andato storto",
+    "emptyState": {
+      "title": "Chiedi informazioni sui tuoi documenti legali",
+      "description": "Carica contratti, policy o testi legali — poi fai domande in linguaggio naturale. Ottieni risposte fondate sui tuoi documenti con citazioni delle fonti."
+    },
+    "exampleQueries": {
+      "termination": "Quali sono le clausole di risoluzione?",
+      "liability": "Riassumi la sezione sulla responsabilità",
+      "payment": "Quali sono le condizioni di pagamento?"
+    },
+    "hideSources": "Nascondi fonti",
+    "sourceCount": "{count, plural, one {1 fonte} other {# fonti}}",
+    "agents": {
+      "researcher": "Ricerca in corso",
+      "writer": "Scrittura in corso",
+      "summarizer": "Riepilogo in corso"
+    }
+  },
+  "upload": {
+    "title": "Carica documenti",
+    "subtitle": "Aggiungi documenti legali alla tua base di conoscenza per domande e risposte assistite dall'IA",
+    "processing": "Elaborazione documenti...",
+    "status": {
+      "processing": "Elaborazione...",
+      "chunks": "{count} frammenti"
+    },
+    "failed": "Caricamento non riuscito",
+    "dropzone": {
+      "label": "Carica file trascinandoli o cliccando",
+      "text": "Trascina i file qui o <browse>sfoglia</browse>",
+      "hint": "{types} — Max {maxSize} MB per file",
+      "unsupportedType": "Tipo di file non supportato: {ext}",
+      "tooLarge": "File troppo grande: {name} (max {maxSize} MB)"
+    }
+  },
+  "documents": {
+    "title": "Documenti",
+    "loading": "Caricamento...",
+    "documentCount": "{count, plural, =0 {Nessun documento} one {1 documento} other {# documenti}} nella tua base di conoscenza",
+    "deleteFailed": "Eliminazione non riuscita",
+    "columns": {
+      "document": "Documento",
+      "date": "Data",
+      "chunks": "Frammenti",
+      "status": "Stato",
+      "actions": "Azioni"
+    },
+    "confirm": "Conferma",
+    "cancel": "Annulla",
+    "deleteLabel": "Elimina {name}",
+    "empty": {
+      "title": "Nessun documento",
+      "description": "Carica documenti per iniziare a fare domande"
+    }
+  },
+  "errors": {
+    "somethingWentWrong": "Qualcosa è andato storto",
+    "refreshHint": "Aggiorna la pagina per riprovare.",
+    "refreshPage": "Aggiorna pagina"
+  }
+}

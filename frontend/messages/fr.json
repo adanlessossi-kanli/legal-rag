@@ -1,0 +1,119 @@
+{
+  "common": {
+    "appName": "Legal RAG",
+    "appTagline": "Assistant juridique IA",
+    "appTitle": "Legal RAG — Assistant juridique IA",
+    "appDescription": "Téléversez des contrats, politiques ou tout texte juridique — puis posez des questions en langage naturel et obtenez des réponses sourcées avec citations.",
+    "nav": {
+      "newChat": "Nouvelle discussion",
+      "upload": "Téléverser",
+      "documents": "Documents"
+    },
+    "recent": "Récents",
+    "signOut": "Se déconnecter",
+    "openNav": "Ouvrir la navigation",
+    "closeNav": "Fermer la navigation",
+    "closeNavOverlay": "Fermer le panneau de navigation"
+  },
+  "auth": {
+    "login": {
+      "title": "Connexion à Legal RAG",
+      "subtitle": "Entrez vos identifiants pour continuer",
+      "emailLabel": "E-mail",
+      "emailPlaceholder": "vous@exemple.com",
+      "passwordLabel": "Mot de passe",
+      "passwordPlaceholder": "••••••••",
+      "submit": "Se connecter",
+      "submitting": "Connexion en cours...",
+      "noAccount": "Vous n'avez pas de compte ?",
+      "signUpLink": "S'inscrire",
+      "failed": "Échec de la connexion"
+    },
+    "register": {
+      "title": "Créer votre compte",
+      "subtitle": "Commencez avec Legal RAG",
+      "nameLabel": "Nom",
+      "namePlaceholder": "Marie Dupont",
+      "emailLabel": "E-mail",
+      "emailPlaceholder": "vous@exemple.com",
+      "passwordLabel": "Mot de passe",
+      "passwordPlaceholder": "Min 8 car., majuscule + minuscule + chiffre",
+      "submit": "Créer un compte",
+      "submitting": "Création du compte...",
+      "hasAccount": "Vous avez déjà un compte ?",
+      "signInLink": "Se connecter",
+      "failed": "Échec de l'inscription"
+    }
+  },
+  "chat": {
+    "title": "Discussion",
+    "subtitle": "Posez des questions sur vos documents juridiques",
+    "newChat": "Nouvelle discussion",
+    "inputPlaceholder": "Posez une question juridique...",
+    "sendLabel": "Envoyer le message",
+    "inputLabel": "Champ de saisie du message",
+    "allDocuments": "Tous les documents",
+    "scopedDocuments": "{count, plural, one {1 document} other {# documents}} sélectionné(s)",
+    "disclaimer": "Les réponses sont générées par IA à partir de vos documents. Vérifiez toujours les informations juridiques critiques.",
+    "failedToLoad": "Impossible de charger la conversation",
+    "somethingWentWrong": "Une erreur est survenue",
+    "emptyState": {
+      "title": "Interrogez vos documents juridiques",
+      "description": "Téléversez des contrats, politiques ou textes juridiques — puis posez des questions en langage naturel. Obtenez des réponses fondées sur vos documents avec citations des sources."
+    },
+    "exampleQueries": {
+      "termination": "Quelles sont les clauses de résiliation ?",
+      "liability": "Résumez la section responsabilité",
+      "payment": "Quelles sont les conditions de paiement ?"
+    },
+    "hideSources": "Masquer les sources",
+    "sourceCount": "{count, plural, one {1 source} other {# sources}}",
+    "agents": {
+      "researcher": "Recherche en cours",
+      "writer": "Rédaction en cours",
+      "summarizer": "Résumé en cours"
+    }
+  },
+  "upload": {
+    "title": "Téléverser des documents",
+    "subtitle": "Ajoutez des documents juridiques à votre base de connaissances pour un Q&R assisté par IA",
+    "processing": "Traitement des documents...",
+    "status": {
+      "processing": "Traitement...",
+      "chunks": "{count} fragments"
+    },
+    "failed": "Échec du téléversement",
+    "dropzone": {
+      "label": "Téléversez des fichiers en les déposant ou en cliquant",
+      "text": "Déposez les fichiers ici ou <browse>parcourir</browse>",
+      "hint": "{types} — Max {maxSize} Mo par fichier",
+      "unsupportedType": "Type de fichier non pris en charge : {ext}",
+      "tooLarge": "Fichier trop volumineux : {name} (max {maxSize} Mo)"
+    }
+  },
+  "documents": {
+    "title": "Documents",
+    "loading": "Chargement...",
+    "documentCount": "{count, plural, =0 {Aucun document} one {1 document} other {# documents}} dans votre base de connaissances",
+    "deleteFailed": "Échec de la suppression",
+    "columns": {
+      "document": "Document",
+      "date": "Date",
+      "chunks": "Fragments",
+      "status": "Statut",
+      "actions": "Actions"
+    },
+    "confirm": "Confirmer",
+    "cancel": "Annuler",
+    "deleteLabel": "Supprimer {name}",
+    "empty": {
+      "title": "Aucun document",
+      "description": "Téléversez des documents pour commencer à poser des questions"
+    }
+  },
+  "errors": {
+    "somethingWentWrong": "Une erreur est survenue",
+    "refreshHint": "Veuillez rafraîchir la page pour réessayer.",
+    "refreshPage": "Rafraîchir la page"
+  }
+}
