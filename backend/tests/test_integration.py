@@ -46,6 +46,18 @@ skip_no_mongo = pytest.mark.skipif(
 )
 
 
+@pytest.fixture(autouse=True)
+def _patch_db():
+    """Override conftest's _patch_db — integration tests use real MongoDB."""
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _init_orchestrator():
+    """Override conftest's _init_orchestrator — not needed for integration tests."""
+    yield
+
+
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def db():
     client = AsyncIOMotorClient(MONGO_URI)
