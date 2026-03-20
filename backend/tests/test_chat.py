@@ -13,7 +13,7 @@ def test_chat_returns_answer_with_sources(client, auth_headers):
         Source(document="contract.pdf", chunk_id="c1", text="Liability clause text"),
     ]
     with patch("app.api.chat.query", new_callable=AsyncMock) as mock_query:
-        mock_query.return_value = ("The liability clause states...", mock_sources)
+        mock_query.return_value = ("The liability clause states...", mock_sources, False)
         resp = client.post(
             "/api/chat",
             json={"question": "What is the liability clause?"},
@@ -32,7 +32,7 @@ def test_chat_returns_answer_with_sources(client, auth_headers):
 def test_chat_creates_conversation(client, auth_headers):
     """First message should create a new conversation."""
     with patch("app.api.chat.query", new_callable=AsyncMock) as mock_query:
-        mock_query.return_value = ("Answer", [])
+        mock_query.return_value = ("Answer", [], False)
         resp = client.post(
             "/api/chat",
             json={"question": "Hello"},
@@ -47,7 +47,7 @@ def test_chat_creates_conversation(client, auth_headers):
 def test_chat_continues_conversation(client, auth_headers):
     """Providing conversation_id should append to existing conversation."""
     with patch("app.api.chat.query", new_callable=AsyncMock) as mock_query:
-        mock_query.return_value = ("First answer", [])
+        mock_query.return_value = ("First answer", [], False)
         resp1 = client.post(
             "/api/chat",
             json={"question": "First question"},
@@ -56,7 +56,7 @@ def test_chat_continues_conversation(client, auth_headers):
     cid = resp1.json()["conversation_id"]
 
     with patch("app.api.chat.query", new_callable=AsyncMock) as mock_query:
-        mock_query.return_value = ("Follow-up answer", [])
+        mock_query.return_value = ("Follow-up answer", [], False)
         resp2 = client.post(
             "/api/chat",
             json={"question": "Follow-up", "conversation_id": cid},

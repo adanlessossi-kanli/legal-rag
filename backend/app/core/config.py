@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     enable_query_rewriting: bool = True
     log_format: str = "json"
 
+    # Multi-agent
+    researcher_summarize_threshold: int = 10000
+    summarizer_model: str = "gpt-4o-mini"
+    summarizer_max_length: int = 500
+
     # Security
     max_login_attempts: int = 5
     lockout_duration_minutes: int = 15

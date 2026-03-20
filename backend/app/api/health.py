@@ -32,5 +32,16 @@ async def health(deep: bool = False):
         checks["openai"] = "openai_unavailable"
         logger.exception("Deep health check: OpenAI failed")
 
-    status = "ok" if all(v == "ok" for v in checks.values()) else "degraded"
+    try:
+        from app.agents import get_orchestrator
+        agent_health = await get_orchestrator().health_check()
+        checks["agents"] = agent_health
+    except Exception:
+        checks["agents"] = "agents_unavailable"
+        logger.exception("Deep health check: Agents failed")
+
+    status = "ok" if all(v == "ok" for v in checks.values() if isinstance(v, str)) else "degraded"
+    if isinstance(checks.get("agents"), dict):
+        if any(v != "ok" for v in checks["agents"].values()):
+            status = "degraded"
     return HealthResponse(status=status, checks=checks)

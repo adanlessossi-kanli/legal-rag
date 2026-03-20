@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -88,11 +89,27 @@ async def chat(request: Request, req: ChatRequest, user: dict = Depends(get_curr
 
 
 async def _stream_response(question: str, history: list, conversation_id: str, user_id: ObjectId, document_ids: list[str] | None = None) -> StreamingResponse:
-    token_gen, sources, no_context = await query_stream(question, history, str(user_id), document_ids)
+    status_queue: asyncio.Queue = asyncio.Queue()
+
+    async def on_status(agent: str, status: str) -> None:
+        await status_queue.put({"type": "agent_status", "agent": agent, "status": status})
+
+    token_gen, sources, no_context = await query_stream(question, history, str(user_id), document_ids, on_status)
 
     async def event_stream():
+        # Drain any status events emitted during research phase
+        while not status_queue.empty():
+            evt = await status_queue.get()
+            yield f"data: {json.dumps(evt)}\n\n"
+
         sources_data = [s.model_dump() for s in sources]
         yield f"data: {json.dumps({'type': 'sources', 'sources': sources_data})}\n\n"
+
+        # Drain status events emitted after sources (writer working)
+        while not status_queue.empty():
+            evt = await status_queue.get()
+            yield f"data: {json.dumps(evt)}\n\n"
+
         yield f"data: {json.dumps({'type': 'conversation_id', 'conversation_id': conversation_id})}\n\n"
 
         if no_context:
@@ -104,6 +121,11 @@ async def _stream_response(question: str, history: list, conversation_id: str, u
                 full_answer.append(token)
                 yield f"data: {json.dumps({'type': 'token', 'token': token})}\n\n"
             await _save_message(conversation_id, user_id, "assistant", "".join(full_answer), sources)
+
+        # Drain final status events (done)
+        while not status_queue.empty():
+            evt = await status_queue.get()
+            yield f"data: {json.dumps(evt)}\n\n"
 
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 

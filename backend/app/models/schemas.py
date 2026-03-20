@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, EmailStr, field_validator
 
@@ -128,7 +128,7 @@ class DeleteResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
-    checks: dict[str, str] | None = None
+    checks: dict[str, Any] | None = None
 
 
 # --- Conversations ---

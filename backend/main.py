@@ -30,8 +30,13 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     await connect_db()
     await start_worker()
+
+    from app.agents import create_orchestrator
+    app.state.orchestrator = await create_orchestrator()
+
     logger.info("Starting Legal RAG API")
     yield
+    await app.state.orchestrator.shutdown()
     await stop_worker()
     await close_db()
     logger.info("Shutting down Legal RAG API")
