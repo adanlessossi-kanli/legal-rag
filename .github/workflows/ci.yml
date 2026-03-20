@@ -75,6 +75,8 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - uses: actions/setup-node@v4
         with:
@@ -109,6 +111,8 @@ jobs:
             image_env: FRONTEND_IMAGE
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - uses: docker/login-action@v3
         with:

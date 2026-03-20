@@ -23,10 +23,10 @@ DB_NAME = "legal_rag_integration_test"
 COLLECTION = "chunks"
 INDEX_NAME = "vector_index"
 
-pytestmark = [
-    pytest.mark.integration,
-    pytest.mark.asyncio(loop_scope="module"),
-]
+pytestmark = pytest.mark.integration
+
+# Applied to all async tests/fixtures in this module
+_async_mark = pytest.mark.asyncio(loop_scope="module")
 
 
 def _is_mongo_available() -> bool:
@@ -105,8 +105,22 @@ async def setup_index(db):
         pass  # may already exist
 
     sync_client.close()
-    # Wait for index to become queryable
-    await asyncio.sleep(2)
+
+    # Poll until the vector index is queryable (CI runners are slower)
+    coll = db[COLLECTION]
+    await coll.insert_one({"_probe": True, "embedding": [0.0, 0.0, 0.1], "user_id": "_probe", "org_id": "", "doc_id": ""})
+    probe_pipeline = [
+        {"$vectorSearch": {"index": INDEX_NAME, "path": "embedding", "queryVector": [0.0, 0.0, 0.1], "numCandidates": 1, "limit": 1}},
+    ]
+    for _ in range(30):
+        try:
+            results = [doc async for doc in coll.aggregate(probe_pipeline)]
+            if results:
+                break
+        except Exception:
+            pass
+        await asyncio.sleep(1)
+    await coll.delete_many({"_probe": True})
     yield
 
 
@@ -121,6 +135,7 @@ def _fake_embedding(seed: float) -> list[float]:
 # ---------------------------------------------------------------------------
 
 @skip_no_mongo
+@_async_mark
 async def test_vector_search_returns_similar_chunks(db, setup_index):
     """End-to-end: insert chunks with embeddings, then $vectorSearch retrieves the most similar."""
     coll = db[COLLECTION]
@@ -171,6 +186,7 @@ async def test_vector_search_returns_similar_chunks(db, setup_index):
 # ---------------------------------------------------------------------------
 
 @skip_no_mongo
+@_async_mark
 async def test_vector_search_with_doc_id_filter(db, setup_index):
     """$vectorSearch respects doc_id filter for document-scoped queries."""
     coll = db[COLLECTION]
@@ -206,6 +222,7 @@ async def test_vector_search_with_doc_id_filter(db, setup_index):
 
 
 @skip_no_mongo
+@_async_mark
 async def test_vector_search_multi_doc_filter(db, setup_index):
     """$vectorSearch with multiple doc_ids returns chunks from all specified docs."""
     coll = db[COLLECTION]
@@ -245,6 +262,7 @@ async def test_vector_search_multi_doc_filter(db, setup_index):
 # ---------------------------------------------------------------------------
 
 @skip_no_mongo
+@_async_mark
 async def test_vector_search_org_scoped(db, setup_index):
     """org_id filter returns all org members' chunks, not just the querying user's."""
     coll = db[COLLECTION]
@@ -283,6 +301,7 @@ async def test_vector_search_org_scoped(db, setup_index):
 
 
 @skip_no_mongo
+@_async_mark
 async def test_vector_search_org_with_doc_filter(db, setup_index):
     """org_id + doc_id filter narrows to specific docs within the org."""
     coll = db[COLLECTION]
@@ -320,6 +339,7 @@ async def test_vector_search_org_with_doc_filter(db, setup_index):
 # ---------------------------------------------------------------------------
 
 @skip_no_mongo
+@_async_mark
 async def test_vector_search_score_ordering(db, setup_index):
     """Results are ordered by descending similarity score."""
     coll = db[COLLECTION]
@@ -354,6 +374,7 @@ async def test_vector_search_score_ordering(db, setup_index):
 # ---------------------------------------------------------------------------
 
 @skip_no_mongo
+@_async_mark
 async def test_vector_search_empty_collection(db, setup_index):
     """$vectorSearch on empty collection returns no results."""
     coll = db[COLLECTION]
@@ -382,6 +403,7 @@ async def test_vector_search_empty_collection(db, setup_index):
 # ---------------------------------------------------------------------------
 
 @skip_no_mongo
+@_async_mark
 async def test_keyword_search_returns_matching_chunks(db, setup_index):
     """MongoDB $text search returns chunks matching keywords."""
     coll = db[COLLECTION]
@@ -411,6 +433,7 @@ async def test_keyword_search_returns_matching_chunks(db, setup_index):
 
 
 @skip_no_mongo
+@_async_mark
 async def test_keyword_search_user_scoped(db, setup_index):
     """Keyword search respects user_id scoping."""
     coll = db[COLLECTION]
