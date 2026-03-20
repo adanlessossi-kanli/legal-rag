@@ -1,15 +1,20 @@
 import logging
 import time
 from collections.abc import AsyncGenerator
+from contextvars import ContextVar
 
 from openai import APIConnectionError, APITimeoutError, RateLimitError
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from app.core.clients import openai_client
 from app.core.config import settings
+from app.core.metrics import LLM_ERRORS, LLM_LATENCY, LLM_TOKENS
 from app.models.schemas import ChatMessage
 
 logger = logging.getLogger(__name__)
+
+# Context var set by chat endpoint so LLM calls can record per-user usage
+current_user_id: ContextVar[str] = ContextVar("current_user_id", default="")
 
 SYSTEM_PROMPT = (
     "You are a legal assistant. Answer the user's question based ONLY on the "
@@ -42,19 +47,37 @@ def _build_messages(question: str, context_chunks: list[dict], history: list[Cha
     return messages
 
 
+async def _track_usage(model: str, operation: str, usage) -> None:
+    LLM_TOKENS.labels("prompt").inc(usage.prompt_tokens)
+    LLM_TOKENS.labels("completion").inc(usage.completion_tokens)
+    uid = current_user_id.get()
+    if uid:
+        from app.core.usage import record_usage
+        try:
+            await record_usage(uid, model, operation, usage.prompt_tokens, usage.completion_tokens)
+        except Exception:
+            logger.warning("Failed to record usage", exc_info=True)
+
+
 @_retry
 async def generate(question: str, context_chunks: list[dict], history: list[ChatMessage]) -> str:
     messages = _build_messages(question, context_chunks, history)
 
     start = time.time()
-    resp = await openai_client.chat.completions.create(
-        model=settings.llm_model,
-        messages=messages,
-        temperature=0.1,
-    )
+    try:
+        resp = await openai_client.chat.completions.create(
+            model=settings.llm_model,
+            messages=messages,
+            temperature=0.1,
+        )
+    except Exception:
+        LLM_ERRORS.labels("generate").inc()
+        raise
     elapsed = time.time() - start
+    LLM_LATENCY.labels("generate").observe(elapsed)
     usage = resp.usage
     logger.info("LLM took %.2fs, tokens: prompt=%d completion=%d", elapsed, usage.prompt_tokens, usage.completion_tokens)
+    await _track_usage(settings.llm_model, "generate", usage)
 
     return resp.choices[0].message.content
 
@@ -78,15 +101,25 @@ async def generate_stream(question: str, context_chunks: list[dict], history: li
 @_retry
 async def rewrite_query(question: str, history: list[ChatMessage]) -> str:
     history_text = "\n".join(f"{m.role}: {m.content}" for m in history)
-    resp = await openai_client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": REWRITE_PROMPT},
-            {"role": "user", "content": f"History:\n{history_text}\n\nFollow-up question: {question}\n\nStandalone question:"},
-        ],
-        temperature=0,
-        max_tokens=256,
-    )
+    start = time.time()
+    try:
+        resp = await openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": REWRITE_PROMPT},
+                {"role": "user", "content": f"History:\n{history_text}\n\nFollow-up question: {question}\n\nStandalone question:"},
+            ],
+            temperature=0,
+            max_tokens=256,
+        )
+    except Exception:
+        LLM_ERRORS.labels("rewrite").inc()
+        raise
+    LLM_LATENCY.labels("rewrite").observe(time.time() - start)
+    if resp.usage:
+        LLM_TOKENS.labels("prompt").inc(resp.usage.prompt_tokens)
+        LLM_TOKENS.labels("completion").inc(resp.usage.completion_tokens)
+        await _track_usage("gpt-4o-mini", "rewrite", resp.usage)
     rewritten = resp.choices[0].message.content.strip()
     logger.info("Rewrote query: '%s' -> '%s'", question, rewritten)
     return rewritten

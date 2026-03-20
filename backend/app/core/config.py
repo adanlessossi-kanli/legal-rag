@@ -35,6 +35,17 @@ class Settings(BaseSettings):
     default_page_size: int = 20
     max_page_size: int = 100
 
+    # Redis cache
+    redis_url: str = "redis://localhost:6379/0"
+    cache_ttl_seconds: int = 3600
+    cache_enabled: bool = True
+
+    # Hybrid search + reranking
+    enable_hybrid_search: bool = True
+    keyword_search_limit: int = 10
+    enable_reranking: bool = True
+    rerank_model: str = "gpt-4o-mini"
+
     # Ingestion queue
     ingestion_max_retries: int = 3
     ingestion_retry_delay_seconds: int = 30

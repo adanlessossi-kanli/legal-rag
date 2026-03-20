@@ -1,0 +1,70 @@
+services:
+  mongodb:
+    image: mongodb/mongodb-atlas-local:8.0
+    container_name: legal-rag-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGODB_INITDB_DATABASE=legal_rag
+    volumes:
+      - mongo_data:/data/db
+
+  redis:
+    image: redis:7-alpine
+    container_name: legal-rag-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+
+  backend:
+    build: ./backend
+    container_name: legal-rag-backend
+    ports:
+      - "8000:8000"
+    env_file: ./backend/.env
+    environment:
+      - MONGODB_HOST=mongodb
+      - MONGODB_PORT=27017
+      - MONGODB_OPTIONS=directConnection=true
+      - REDIS_URL=redis://redis:6379/0
+      - CORS_ORIGINS=http://localhost:3000
+    depends_on:
+      mongodb:
+        condition: service_started
+      redis:
+        condition: service_started
+    volumes:
+      - backend_uploads:/app/uploads
+
+  migrate:
+    build: ./backend
+    container_name: legal-rag-migrate
+    entrypoint: ["python", "migrations/runner.py"]
+    env_file: ./backend/.env
+    environment:
+      - MONGODB_HOST=mongodb
+      - MONGODB_PORT=27017
+      - MONGODB_OPTIONS=directConnection=true
+    depends_on:
+      mongodb:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:8000
+    container_name: legal-rag-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+
+volumes:
+  mongo_data:
+  redis_data:
+  backend_uploads:

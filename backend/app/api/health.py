@@ -33,6 +33,17 @@ async def health(deep: bool = False):
         logger.exception("Deep health check: OpenAI failed")
 
     try:
+        from app.core.cache import _redis
+        if _redis:
+            await _redis.ping()
+            checks["redis"] = "ok"
+        else:
+            checks["redis"] = "disabled"
+    except Exception:
+        checks["redis"] = "redis_unavailable"
+        logger.exception("Deep health check: Redis failed")
+
+    try:
         from app.agents import get_orchestrator
         agent_health = await get_orchestrator().health_check()
         checks["agents"] = agent_health
@@ -40,7 +51,7 @@ async def health(deep: bool = False):
         checks["agents"] = "agents_unavailable"
         logger.exception("Deep health check: Agents failed")
 
-    status = "ok" if all(v == "ok" for v in checks.values() if isinstance(v, str)) else "degraded"
+    status = "ok" if all(v == "ok" or v == "disabled" for v in checks.values() if isinstance(v, str)) else "degraded"
     if isinstance(checks.get("agents"), dict):
         if any(v != "ok" for v in checks["agents"].values()):
             status = "degraded"

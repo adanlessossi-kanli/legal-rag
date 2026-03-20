@@ -9,10 +9,12 @@ from fastapi.responses import StreamingResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from app.core.auth import get_current_user
+from app.core.auth import get_current_user, get_org_id
+from app.core.cache import get_cached_response, set_cached_response
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.schemas import ChatMessage, ChatRequest, ChatResponse, Source
+from app.rag.llm import current_user_id
 from app.rag.pipeline import NO_CONTEXT_ANSWER, query, query_stream
 
 logger = logging.getLogger(__name__)
@@ -66,6 +68,7 @@ async def _save_message(conversation_id: str, user_id: ObjectId, role: str, cont
 @limiter.limit(settings.rate_limit_chat)
 async def chat(request: Request, req: ChatRequest, user: dict = Depends(get_current_user)):
     user_id = user["_id"]
+    org_id = get_org_id(user)
     stream = request.query_params.get("stream", "").lower() == "true"
 
     conversation_id = req.conversation_id
@@ -77,24 +80,57 @@ async def chat(request: Request, req: ChatRequest, user: dict = Depends(get_curr
 
     await _save_message(conversation_id, user_id, "user", req.question)
 
+    # Validate document_ids belong to this user/org
+    if req.document_ids:
+        db = get_db()
+        for did in req.document_ids:
+            doc = await db.documents.find_one({"doc_id": did})
+            if not doc:
+                raise HTTPException(status_code=404, detail=f"Document {did} not found")
+            doc_owner = str(doc.get("user_id", ""))
+            doc_org = str(doc.get("org_id", "")) if doc.get("org_id") else None
+            if doc_owner != str(user_id) and (not org_id or doc_org != org_id):
+                raise HTTPException(status_code=403, detail=f"Access denied to document {did}")
+
+    # Set user context for per-user cost tracking
+    token = current_user_id.set(str(user_id))
     try:
         if stream:
-            return await _stream_response(req.question, history, conversation_id, user_id, req.document_ids)
-        answer, sources, no_context = await query(req.question, history, str(user_id), req.document_ids)
+            return await _stream_response(req.question, history, conversation_id, user_id, req.document_ids, org_id)
+
+        # Check cache for non-streaming requests (only when no history — first question)
+        if not history:
+            cached = await get_cached_response(str(user_id), req.question, req.document_ids)
+            if cached:
+                await _save_message(conversation_id, user_id, "assistant", cached["answer"], [Source(**s) for s in cached["sources"]])
+                return ChatResponse(answer=cached["answer"], sources=[Source(**s) for s in cached["sources"]], conversation_id=conversation_id, no_context=cached.get("no_context", False))
+
+        answer, sources, no_context = await query(req.question, history, str(user_id), req.document_ids, org_id=org_id)
         await _save_message(conversation_id, user_id, "assistant", answer, sources)
+
+        # Cache the response for future identical queries
+        if not history:
+            await set_cached_response(str(user_id), req.question, req.document_ids, {
+                "answer": answer,
+                "sources": [s.model_dump() for s in sources],
+                "no_context": no_context,
+            })
+
         return ChatResponse(answer=answer, sources=sources, conversation_id=conversation_id, no_context=no_context)
     except Exception:
         logger.exception("Chat failed")
         raise HTTPException(status_code=500, detail="Failed to generate answer")
+    finally:
+        current_user_id.reset(token)
 
 
-async def _stream_response(question: str, history: list, conversation_id: str, user_id: ObjectId, document_ids: list[str] | None = None) -> StreamingResponse:
+async def _stream_response(question: str, history: list, conversation_id: str, user_id: ObjectId, document_ids: list[str] | None = None, org_id: str | None = None) -> StreamingResponse:
     status_queue: asyncio.Queue = asyncio.Queue()
 
     async def on_status(agent: str, status: str) -> None:
         await status_queue.put({"type": "agent_status", "agent": agent, "status": status})
 
-    token_gen, sources, no_context = await query_stream(question, history, str(user_id), document_ids, on_status)
+    token_gen, sources, no_context = await query_stream(question, history, str(user_id), document_ids, on_status, org_id=org_id)
 
     async def event_stream():
         # Drain any status events emitted during research phase

@@ -45,7 +45,8 @@ def _get_mock_db():
 async def _patch_db():
     """Patch get_db globally and clear collections between tests."""
     with patch("app.core.database.get_db", _get_mock_db), \
-         patch("app.core.database._db", _mock_db):
+         patch("app.core.database._db", _mock_db), \
+         patch("app.core.cache._redis", None):
         yield
     # Clean up all collections after each test
     for name in await _mock_db.list_collection_names():

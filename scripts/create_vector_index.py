@@ -30,6 +30,14 @@ INDEX_DEFINITION = {
                 "type": "filter",
                 "path": "user_id",
             },
+            {
+                "type": "filter",
+                "path": "org_id",
+            },
+            {
+                "type": "filter",
+                "path": "doc_id",
+            },
         ],
     },
 }

@@ -54,7 +54,15 @@ async def connect_db() -> None:
     await _db.refresh_tokens.create_index("expires_at", expireAfterSeconds=0)
     await _db.chunks.create_index("doc_id")
     await _db.chunks.create_index("user_id")
+    await _db.chunks.create_index("org_id")
     await _db.chunks.create_index("chunk_id")
+    # Text index for hybrid keyword search
+    await _db.chunks.create_index([("text", "text")], default_language="english")
+    await _db.usage.create_index([("user_id", 1), ("month", 1)])
+    await _db.usage.create_index("created_at")
+    await _db.organizations.create_index("owner_id")
+    await _db.org_members.create_index([("org_id", 1), ("user_id", 1)], unique=True)
+    await _db.org_members.create_index("user_id")
 
     logger.info("Connected to MongoDB at %s", settings.mongodb_host)
     logger.info(
