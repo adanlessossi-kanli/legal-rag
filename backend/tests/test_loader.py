@@ -1,3 +1,6 @@
+"""
+Loader tests: PDF, TXT, DOCX text extraction.
+"""
 import tempfile
 from pathlib import Path
 
@@ -24,7 +27,6 @@ def test_load_txt_empty():
         f.flush()
         pages = load_document(f.name)
 
-    # Empty text still produces one page
     assert len(pages) == 1
     Path(f.name).unlink()
 
@@ -35,4 +37,22 @@ def test_load_unsupported():
         f.flush()
         with pytest.raises(ValueError, match="Unsupported file type"):
             load_document(f.name)
+    Path(f.name).unlink()
+
+
+def test_load_docx():
+    from docx import Document
+
+    doc = Document()
+    doc.add_paragraph("Legal clause one.")
+    doc.add_paragraph("Legal clause two.")
+
+    with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+        doc.save(f.name)
+        pages = load_document(f.name)
+
+    assert len(pages) >= 1
+    full_text = " ".join(p.text for p in pages)
+    assert "Legal clause one." in full_text
+    assert "Legal clause two." in full_text
     Path(f.name).unlink()
