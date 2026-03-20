@@ -80,13 +80,13 @@ jobs:
         with:
           node-version: 18
 
-      - uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: npm-${{ hashFiles('frontend/package-lock.json') }}
-          restore-keys: npm-
-
-      - run: npm ci
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
       - run: npm run lint
       - run: npm run build
         env:
