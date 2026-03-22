@@ -51,7 +51,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 "connect-src 'self' https://api.openai.com"
             )
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
+        if not (request.url.path.endswith("/file") and "/documents/" in request.url.path):
+            response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         return response

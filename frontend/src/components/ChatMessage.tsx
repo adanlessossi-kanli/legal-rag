@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useMemo, lazy, Suspense } from "react";
+import { useState, useMemo } from "react";
 import { useTranslations } from "next-intl";
+import dynamic from "next/dynamic";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import FeedbackButton from "@/components/FeedbackButton";
 import type { Source } from "@/lib/api";
 
-const SourceViewer = lazy(() => import("@/components/SourceViewer"));
+const SourceViewer = dynamic(() => import("@/components/SourceViewer"), { ssr: false });
 
 interface ChatMessageProps {
   role: "user" | "assistant";
@@ -165,9 +166,7 @@ export default function ChatMessage({ role, content, sources, messageId, convers
       </div>
 
       {viewerSource && (
-        <Suspense fallback={null}>
-          <SourceViewer source={viewerSource} open={true} onClose={() => setViewerSource(null)} />
-        </Suspense>
+        <SourceViewer source={viewerSource} open={true} onClose={() => setViewerSource(null)} />
       )}
     </div>
   );

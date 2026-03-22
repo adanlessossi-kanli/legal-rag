@@ -25,6 +25,13 @@ function pageLabel(source: Source, t: ReturnType<typeof useTranslations>) {
   return t("page", { page: source.page ?? 1 });
 }
 
+function pdfFragment(source: Source): string {
+  const page = source.page ?? 1;
+  const words = (source.text || "").trim().split(/\s+/).slice(0, 6).join(" ").replace(/[#&?]/g, "");
+  if (words) return `#page=${page}&search=${encodeURIComponent(words)}`;
+  return `#page=${page}`;
+}
+
 export default function SourceViewer({ source, open, onClose }: SourceViewerProps) {
   const t = useTranslations("chat");
   const [fileUrl, setFileUrl] = useState<string | null>(null);
@@ -38,19 +45,15 @@ export default function SourceViewer({ source, open, onClose }: SourceViewerProp
     try {
       const url = await getDocumentFileUrl(source.doc_id);
       setFileUrl(url);
-    } catch (e) {
-      setError(e instanceof Error && e.message.includes("no longer available")
-        ? t("fileUnavailable")
-        : t("fileUnavailable"));
+    } catch {
+      setError(t("fileUnavailable"));
     } finally {
       setLoading(false);
     }
   }, [source.doc_id, t]);
 
   useEffect(() => {
-    if (open && isPdf(source.document) && source.doc_id) {
-      fetchUrl();
-    }
+    if (open && isPdf(source.document) && source.doc_id) fetchUrl();
     return () => { setFileUrl(null); setError(null); };
   }, [open, source.document, source.doc_id, fetchUrl]);
 
@@ -63,8 +66,12 @@ export default function SourceViewer({ source, open, onClose }: SourceViewerProp
 
   useEffect(() => {
     if (!open) return;
-    window.location.hash = `source=${source.doc_id}&page=${source.page ?? 1}`;
-    return () => { if (window.location.hash.includes("source=")) window.location.hash = ""; };
+    const hash = `#source=${source.doc_id}&page=${source.page ?? 1}`;
+    history.replaceState(null, "", hash);
+    return () => {
+      if (window.location.hash.includes("source="))
+        history.replaceState(null, "", window.location.pathname + window.location.search);
+    };
   }, [open, source.doc_id, source.page]);
 
   if (!open) return null;
@@ -81,7 +88,6 @@ export default function SourceViewer({ source, open, onClose }: SourceViewerProp
         className="bg-surface border border-border rounded-2xl shadow-md w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden md:mx-4 mx-0 md:rounded-2xl rounded-none md:max-h-[90vh] max-h-full md:w-auto w-full md:h-auto h-full"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <div className="min-w-0">
             <h2 className="text-sm font-semibold text-foreground truncate">
@@ -101,7 +107,6 @@ export default function SourceViewer({ source, open, onClose }: SourceViewerProp
           </button>
         </div>
 
-        {/* Body */}
         <div className="flex-1 overflow-auto p-4">
           {loading && (
             <div className="flex items-center justify-center py-16">
@@ -126,7 +131,7 @@ export default function SourceViewer({ source, open, onClose }: SourceViewerProp
 
           {!loading && !error && isPdf(source.document) && fileUrl && (
             <iframe
-              src={`${fileUrl}#page=${source.page ?? 1}`}
+              src={`${fileUrl}${pdfFragment(source)}`}
               className="w-full h-[70vh] rounded-lg border border-border"
               title={source.document}
             />
@@ -137,9 +142,9 @@ export default function SourceViewer({ source, open, onClose }: SourceViewerProp
               <div className="inline-flex items-center gap-1.5 text-xs text-muted bg-surface-hover rounded-md px-2 py-1">
                 {pageLabel(source, t)}
               </div>
-              <pre className="text-sm text-foreground bg-surface-hover border border-border rounded-lg p-4 whitespace-pre-wrap break-words leading-relaxed">
-                {source.text}
-              </pre>
+              <div className="text-sm bg-surface-hover border border-border rounded-lg p-4 whitespace-pre-wrap break-words leading-relaxed">
+                <mark className="bg-accent/20 text-foreground rounded px-0.5">{source.text}</mark>
+              </div>
             </div>
           )}
         </div>

@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
 
-from app.core.auth import get_current_user, get_org_id
+from app.core.auth import get_current_user, get_optional_user, get_org_id
 from app.core.cache import invalidate_user_cache
 from app.core.config import settings
 from app.core import metadata
@@ -17,6 +17,9 @@ from app.rag.pipeline import remove_document
 
 logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(get_current_user)])
+
+# Separate router for endpoints that support signed-URL auth (no Bearer required)
+file_router = APIRouter()
 
 
 @router.get("/documents", response_model=PaginatedDocuments)
@@ -140,13 +143,13 @@ async def file_token(doc_id: str, user: dict = Depends(get_current_user)):
     return {"url": f"/api/documents/{doc_id}/file?sig={sig}&exp={exp}"}
 
 
-@router.get("/documents/{doc_id}/file")
+@file_router.get("/documents/{doc_id}/file")
 async def serve_file(
     doc_id: str,
     request: Request,
     sig: str | None = Query(None),
     exp: int | None = Query(None),
-    user: dict | None = Depends(get_current_user),
+    user: dict | None = Depends(get_optional_user),
 ):
     doc = await metadata.get_document(doc_id)
     if not doc:
