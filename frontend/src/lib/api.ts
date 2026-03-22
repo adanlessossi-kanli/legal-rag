@@ -261,6 +261,11 @@ export function connectIngestionWs(onEvent: (event: IngestionEvent) => void): ((
 
   const wsBase = API_BASE.replace(/^http/, "ws");
   const ws = new WebSocket(`${wsBase}/api/ws/ingestion?token=${token}`);
+  let disposed = false;
+
+  ws.onopen = () => {
+    if (disposed) ws.close();
+  };
 
   ws.onmessage = (e) => {
     try {
@@ -269,7 +274,14 @@ export function connectIngestionWs(onEvent: (event: IngestionEvent) => void): ((
     } catch { /* ignore parse errors */ }
   };
 
-  ws.onerror = () => ws.close();
+  ws.onerror = () => {
+    if (ws.readyState === WebSocket.OPEN) ws.close();
+  };
 
-  return () => ws.close();
+  return () => {
+    disposed = true;
+    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CLOSING) {
+      ws.close();
+    }
+  };
 }

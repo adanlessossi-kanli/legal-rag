@@ -85,6 +85,7 @@ class Executor:
             await on_status(step.agent, "working")
 
             resolved_inputs = self._resolve_dependencies(step.inputs, step_outputs, request_context)
+            resolved_inputs = self._ensure_required_inputs(step, resolved_inputs, request_context, plan)
             agent = self._registry.get_handler(step.agent)
 
             try:
@@ -136,6 +137,18 @@ class Executor:
             else:
                 resolved[key] = value
         return resolved
+
+    def _ensure_required_inputs(self, step: PlanStep, inputs: dict, request_context: dict, plan: ExecutionPlan) -> dict:
+        """Guarantee required fields for known tools, regardless of LLM plan quality."""
+        if step.tool == "researcher.research":
+            inputs.setdefault("question", request_context["ORIGINAL_GOAL"])
+            inputs.setdefault("user_id", request_context["USER_ID"])
+            inputs.setdefault("history", request_context["HISTORY"])
+            inputs.setdefault("document_ids", request_context["DOCUMENT_IDS"])
+            inputs.setdefault("org_id", request_context["ORG_ID"] or None)
+        elif step.tool == "summarizer.summarize":
+            inputs.setdefault("objective", request_context["ORIGINAL_GOAL"])
+        return inputs
 
     def _resolve_placeholder(self, placeholder: str, step_outputs: dict, request_context: dict):
         from app.agents.base import AgentError
