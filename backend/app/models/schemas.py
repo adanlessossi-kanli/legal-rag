@@ -86,8 +86,14 @@ class ChatRequest(BaseModel):
 
 class Source(BaseModel):
     document: str
+    doc_id: str = ""
     chunk_id: str
     text: str
+    page: int | None = None
+    page_end: int | None = None
+    start_char: int | None = None
+    end_char: int | None = None
+    relevance: float | None = None
 
 
 class ChatResponse(BaseModel):

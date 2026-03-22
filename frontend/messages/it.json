@@ -68,6 +68,20 @@
     },
     "hideSources": "Nascondi fonti",
     "sourceCount": "{count, plural, one {1 fonte} other {# fonti}}",
+    "viewSource": "Visualizza fonte",
+    "sourceViewerTitle": "Fonte: {document}",
+    "page": "Pagina {page}",
+    "slide": "Diapositiva {page}",
+    "pageRange": "Pagine {start}–{end}",
+    "closeViewer": "Chiudi",
+    "relevance": "{score}% di corrispondenza",
+    "sourcesFromDocument": "{count} fonti da {document}",
+    "searchInDocument": "Cerca nel documento…",
+    "pageOf": "Pagina {current} di {total}",
+    "loadingViewer": "Caricamento documento…",
+    "previousPage": "Pagina precedente",
+    "nextPage": "Pagina successiva",
+    "fileUnavailable": "Questo documento non è più disponibile per l'anteprima",
     "agents": {
       "researcher": "Ricerca in corso",
       "writer": "Scrittura in corso",
@@ -83,6 +97,7 @@
       "chunks": "{count} frammenti"
     },
     "failed": "Caricamento non riuscito",
+    "redirecting": "Reindirizzamento ai documenti…",
     "dropzone": {
       "label": "Carica file trascinandoli o cliccando",
       "text": "Trascina i file qui o <browse>sfoglia</browse>",

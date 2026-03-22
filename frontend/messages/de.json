@@ -68,6 +68,20 @@
     },
     "hideSources": "Quellen ausblenden",
     "sourceCount": "{count, plural, one {1 Quelle} other {# Quellen}}",
+    "viewSource": "Quelle anzeigen",
+    "sourceViewerTitle": "Quelle: {document}",
+    "page": "Seite {page}",
+    "slide": "Folie {page}",
+    "pageRange": "Seiten {start}–{end}",
+    "closeViewer": "Schließen",
+    "relevance": "{score}% Übereinstimmung",
+    "sourcesFromDocument": "{count} Quellen aus {document}",
+    "searchInDocument": "Im Dokument suchen…",
+    "pageOf": "Seite {current} von {total}",
+    "loadingViewer": "Dokument wird geladen…",
+    "previousPage": "Vorherige Seite",
+    "nextPage": "Nächste Seite",
+    "fileUnavailable": "Dieses Dokument ist nicht mehr für die Vorschau verfügbar",
     "agents": {
       "researcher": "Recherche läuft",
       "writer": "Schreibt",
@@ -83,6 +97,7 @@
       "chunks": "{count} Abschnitte"
     },
     "failed": "Hochladen fehlgeschlagen",
+    "redirecting": "Weiterleitung zu Dokumenten…",
     "dropzone": {
       "label": "Dateien per Drag-and-Drop oder Klick hochladen",
       "text": "Dateien hier ablegen oder <browse>durchsuchen</browse>",

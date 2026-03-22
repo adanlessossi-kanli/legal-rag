@@ -134,6 +134,7 @@ export default function DocumentsPage() {
           <option value="pdf">PDF</option>
           <option value="docx">DOCX</option>
           <option value="txt">TXT</option>
+          <option value="pptx">PPTX</option>
         </select>
         <div className="flex items-center gap-1">
           {["uploaded_at", "name", "chunk_count"].map((field) => (

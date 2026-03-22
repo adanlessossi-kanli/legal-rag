@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(get_current_user)])
 limiter = Limiter(key_func=get_remote_address)
 
-ALLOWED_EXTENSIONS = {".pdf", ".txt", ".docx"}
+ALLOWED_EXTENSIONS = {".pdf", ".txt", ".docx", ".pptx"}
 MAX_SIZE_BYTES = 50 * 1024 * 1024
 
 

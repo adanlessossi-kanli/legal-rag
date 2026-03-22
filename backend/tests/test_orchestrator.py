@@ -73,8 +73,8 @@ async def test_query_no_context_returns_fallback(orchestrator, agents):
 
 async def test_query_builds_sources_from_chunks(orchestrator, agents):
     chunks = [
-        {"chunk_id": "c1", "text": "A" * 300, "metadata": {"source": "doc1.pdf"}, "score": 0.9},
-        {"chunk_id": "c2", "text": "B" * 50, "metadata": {"source": "doc2.pdf"}, "score": 0.8},
+        {"chunk_id": "c1", "text": "A" * 300, "metadata": {"source": "doc1.pdf", "doc_id": "d1", "page": 1, "page_start": 1, "page_end": 1}, "score": 0.9},
+        {"chunk_id": "c2", "text": "B" * 50, "metadata": {"source": "doc2.pdf", "doc_id": "d2", "page": 1, "page_start": 1, "page_end": 1}, "score": 0.8},
     ]
     agents["researcher"].call_tool.return_value = {"chunks": chunks, "rewritten_query": None}
     agents["writer"].call_tool.return_value = {"answer": "answer"}
