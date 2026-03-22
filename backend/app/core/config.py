@@ -46,9 +46,30 @@ class Settings(BaseSettings):
     enable_reranking: bool = True
     rerank_model: str = "gpt-4o-mini"
 
+    # Context Engine
+    enable_context_engine: bool = True
+    planner_model: str = "gpt-4o"
+    planner_timeout: int = 15
+    default_namespace: str = "KnowledgeStore"
+
     # Ingestion queue
     ingestion_max_retries: int = 3
     ingestion_retry_delay_seconds: int = 30
+
+    # Circuit breaker
+    circuit_breaker_failure_threshold: int = 5
+    circuit_breaker_recovery_timeout: int = 30
+
+    # Audit log
+    enable_audit_log: bool = True
+
+    # Document versioning
+    enable_document_versioning: bool = True
+    max_document_versions: int = 10
+
+    # CSRF
+    enable_csrf_protection: bool = True
+    csrf_trusted_origins: str = "http://localhost:3000"
 
     # MongoDB
     mongodb_host: str = "localhost"
@@ -59,12 +80,12 @@ class Settings(BaseSettings):
     mongodb_options: str = ""
 
     # JWT
-    jwt_secret: str = "change-me-in-production"
+    jwt_secret: str
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
 
-    model_config = {"env_file": ".env"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
 settings = Settings()

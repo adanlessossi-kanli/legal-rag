@@ -9,6 +9,7 @@ from app.rag.loader import load_document
 from app.rag.vectorstore import delete_by_doc_id, retrieve, store_chunks
 
 _HASH_RE = re.compile(r"^[a-f0-9]{64}$")
+_VALID_NAMESPACES = ("KnowledgeStore", "ContextLibrary")
 
 
 class LibrarianAgent(BaseAgent):
@@ -37,16 +38,20 @@ class LibrarianAgent(BaseAgent):
         document_ids = params.get("document_ids")
         top_k = params.get("top_k", settings.retrieval_top_k)
         org_id = params.get("org_id")
+        namespace = params.get("namespace", "KnowledgeStore")
 
         self._validate_string_length(query, "query", 1, 5000, tool)
         self._validate_int_range(top_k, "top_k", 1, 20, tool)
 
+        if namespace not in _VALID_NAMESPACES:
+            raise AgentError("VALIDATION_ERROR", f"namespace must be one of {_VALID_NAMESPACES}", self.name, tool)
+
         if document_ids and len(document_ids) > 50:
             raise AgentError("VALIDATION_ERROR", "document_ids max 50 items", self.name, tool)
 
-        # Use org_id for retrieval scope if available, otherwise fall back to user_id
-        chunks = await retrieve(query, user_id, document_ids, org_id=org_id)
-        return {
+        chunks = await retrieve(query, user_id, document_ids, org_id=org_id, namespace=namespace)
+
+        result: dict = {
             "chunks": [
                 {
                     "chunk_id": c["chunk_id"],
@@ -56,6 +61,30 @@ class LibrarianAgent(BaseAgent):
                 }
                 for c in chunks
             ]
+        }
+
+        # For ContextLibrary: load the full blueprint for the top match
+        if namespace == "ContextLibrary" and chunks:
+            blueprint_id = chunks[0]["metadata"].get("blueprint_id")
+            if blueprint_id:
+                blueprint = await self._load_blueprint(blueprint_id)
+                if blueprint:
+                    result["blueprint"] = blueprint
+
+        return result
+
+    async def _load_blueprint(self, blueprint_id: str) -> dict | None:
+        from app.core.database import get_db
+        db = get_db()
+        doc = await db.blueprints.find_one({"blueprint_id": blueprint_id})
+        if not doc:
+            self.logger.warning("Blueprint %s not found in blueprints collection", blueprint_id)
+            return None
+        return {
+            "blueprint_id": doc["blueprint_id"],
+            "name": doc["name"],
+            "description": doc["description"],
+            "content": doc["content"],
         }
 
     async def _ingest(self, params: dict) -> dict:
@@ -86,6 +115,7 @@ class LibrarianAgent(BaseAgent):
             chunks = chunk_pages(pages, doc_id)
             for c in chunks:
                 c.metadata["user_id"] = user_id
+                c.metadata["namespace"] = "KnowledgeStore"
                 if org_id:
                     c.metadata["org_id"] = org_id
             await store_chunks(chunks)

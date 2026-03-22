@@ -1,5 +1,6 @@
 import re
 from datetime import datetime
+from enum import Enum
 from typing import Any, Literal
 
 from pydantic import BaseModel, EmailStr, field_validator
@@ -104,6 +105,7 @@ class DocumentInfo(BaseModel):
     uploaded_at: datetime
     chunk_count: int
     status: Literal["processing", "ready", "error"]
+    version: int = 1
 
 
 class PaginatedDocuments(BaseModel):
@@ -175,14 +177,14 @@ class CreateOrgRequest(BaseModel):
 
 class InviteMemberRequest(BaseModel):
     email: EmailStr
-    role: Literal["admin", "member"] = "member"
+    role: Literal["admin", "editor", "viewer"] = "editor"
 
 
 class OrgMember(BaseModel):
     user_id: str
     email: str
     name: str
-    role: Literal["admin", "member"]
+    role: Literal["admin", "editor", "viewer"]
 
 
 class OrgSummary(BaseModel):
@@ -197,3 +199,143 @@ class OrgDetail(BaseModel):
     owner_id: str
     created_at: datetime
     members: list[OrgMember]
+
+
+# --- Blueprints ---
+
+class BlueprintCreate(BaseModel):
+    name: str
+    description: str
+    content: dict
+
+    @field_validator("name")
+    @classmethod
+    def name_length(cls, v: str) -> str:
+        v = v.strip()
+        if not v or len(v) > 255:
+            raise ValueError("Name must be 1-255 characters")
+        return v
+
+    @field_validator("description")
+    @classmethod
+    def description_length(cls, v: str) -> str:
+        v = v.strip()
+        if not v or len(v) > 2000:
+            raise ValueError("Description must be 1-2000 characters")
+        return v
+
+
+class BlueprintUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    content: dict | None = None
+
+    @field_validator("name")
+    @classmethod
+    def name_length(cls, v: str | None) -> str | None:
+        if v is not None:
+            v = v.strip()
+            if not v or len(v) > 255:
+                raise ValueError("Name must be 1-255 characters")
+        return v
+
+    @field_validator("description")
+    @classmethod
+    def description_length(cls, v: str | None) -> str | None:
+        if v is not None:
+            v = v.strip()
+            if not v or len(v) > 2000:
+                raise ValueError("Description must be 1-2000 characters")
+        return v
+
+
+class BlueprintResponse(BaseModel):
+    blueprint_id: str
+    name: str
+    description: str
+    content: dict | None = None
+    is_default: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+
+class PaginatedBlueprints(BaseModel):
+    items: list[BlueprintResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+# --- Audit Log ---
+
+class AuditLogEntry(BaseModel):
+    id: str
+    action: str
+    user_id: str
+    org_id: str = ""
+    resource_type: str
+    resource_id: str
+    detail: str = ""
+    ip_address: str = ""
+    created_at: datetime
+
+
+class PaginatedAuditLog(BaseModel):
+    items: list[AuditLogEntry]
+    total: int
+    page: int
+    page_size: int
+
+
+# --- Feedback ---
+
+class FeedbackRequest(BaseModel):
+    conversation_id: str
+    message_id: str
+    rating: int
+    comment: str = ""
+
+    @field_validator("rating")
+    @classmethod
+    def rating_range(cls, v: int) -> int:
+        if v < 1 or v > 5:
+            raise ValueError("Rating must be between 1 and 5")
+        return v
+
+
+class FeedbackResponse(BaseModel):
+    id: str
+    detail: str = "Feedback recorded"
+
+
+# --- Document Versioning ---
+
+class DocumentVersion(BaseModel):
+    version: int
+    name: str
+    chunk_count: int
+    uploaded_at: datetime
+    content_hash: str
+
+
+# --- Document Search ---
+
+class DocumentSearchParams(BaseModel):
+    query: str | None = None
+    status: Literal["processing", "ready", "error"] | None = None
+    file_type: str | None = None
+    sort_by: Literal["name", "uploaded_at", "chunk_count"] = "uploaded_at"
+    sort_order: Literal["asc", "desc"] = "desc"
+
+
+# --- Export ---
+
+class ExportFormat(str, Enum):
+    MARKDOWN = "markdown"
+    JSON = "json"
+
+
+# --- User Roles ---
+
+class UpdateMemberRoleRequest(BaseModel):
+    role: Literal["admin", "editor", "viewer"]

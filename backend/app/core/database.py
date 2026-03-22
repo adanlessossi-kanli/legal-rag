@@ -64,6 +64,33 @@ async def connect_db() -> None:
     await _db.org_members.create_index([("org_id", 1), ("user_id", 1)], unique=True)
     await _db.org_members.create_index("user_id")
 
+    # Blueprints (Context Engine)
+    await _db.blueprints.create_index("blueprint_id", unique=True)
+    await _db.blueprints.create_index("user_id")
+    await _db.blueprints.create_index("org_id")
+    await _db.blueprints.create_index("is_default")
+    await _db.chunks.create_index("namespace")
+
+    # Audit log
+    await _db.audit_log.create_index("user_id")
+    await _db.audit_log.create_index("org_id")
+    await _db.audit_log.create_index("action")
+    await _db.audit_log.create_index("created_at")
+    await _db.audit_log.create_index([("created_at", 1)], expireAfterSeconds=90 * 86400)  # 90 days
+
+    # Feedback
+    await _db.feedback.create_index("user_id")
+    await _db.feedback.create_index("conversation_id")
+    await _db.feedback.create_index("created_at")
+
+    # Document versions
+    await _db.document_versions.create_index("doc_id")
+    await _db.document_versions.create_index([("doc_id", 1), ("version", -1)])
+
+    # Document search: text index on name
+    await _db.documents.create_index([("name", "text")])
+    await _db.documents.create_index("uploaded_at")
+
     logger.info("Connected to MongoDB at %s", settings.mongodb_host)
     logger.info(
         "NOTE: You must create an Atlas Vector Search index named '%s' on the "

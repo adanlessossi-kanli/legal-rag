@@ -4,12 +4,15 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import FeedbackButton from "@/components/FeedbackButton";
 import type { Source } from "@/lib/api";
 
 interface ChatMessageProps {
   role: "user" | "assistant";
   content: string;
   sources?: Source[];
+  messageId?: string;
+  conversationId?: string | null;
 }
 
 function UserAvatar() {
@@ -44,7 +47,7 @@ function SourceIcon() {
   );
 }
 
-export default function ChatMessage({ role, content, sources }: ChatMessageProps) {
+export default function ChatMessage({ role, content, sources, messageId, conversationId }: ChatMessageProps) {
   const t = useTranslations("chat");
   const [showSources, setShowSources] = useState(false);
   const isUser = role === "user";
@@ -105,6 +108,10 @@ export default function ChatMessage({ role, content, sources }: ChatMessageProps
               </div>
             )}
           </div>
+        )}
+
+        {!isUser && messageId && (
+          <FeedbackButton conversationId={conversationId || null} messageId={messageId} />
         )}
       </div>
     </div>

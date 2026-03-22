@@ -4,6 +4,7 @@ import time
 from openai import APIConnectionError, APITimeoutError, RateLimitError
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
+from app.core.circuit_breaker import CircuitOpenError, openai_circuit
 from app.core.clients import openai_client
 from app.core.config import settings
 from app.core.database import get_db
@@ -25,7 +26,11 @@ _retry = retry(
 async def _embed(texts: list[str]) -> list[list[float]]:
     start = time.time()
     try:
-        resp = await openai_client.embeddings.create(input=texts, model=settings.embedding_model)
+        async with openai_circuit:
+            resp = await openai_client.embeddings.create(input=texts, model=settings.embedding_model)
+    except CircuitOpenError:
+        LLM_ERRORS.labels("embedding").inc()
+        raise
     except Exception:
         LLM_ERRORS.labels("embedding").inc()
         raise
@@ -44,6 +49,7 @@ async def store_chunks(chunks: list[Chunk]) -> None:
             {
                 "chunk_id": c.chunk_id,
                 "doc_id": c.metadata.get("doc_id", ""),
+                "namespace": c.metadata.get("namespace", "KnowledgeStore"),
                 "user_id": c.metadata.get("user_id", ""),
                 "org_id": c.metadata.get("org_id", ""),
                 "text": c.text,
@@ -56,23 +62,31 @@ async def store_chunks(chunks: list[Chunk]) -> None:
     logger.info("Stored %d chunks in MongoDB", len(chunks))
 
 
-def _build_scope_filter(user_id: str, document_ids: list[str] | None, org_id: str | None) -> dict:
-    """Build a MongoDB filter dict for user/org/doc scoping."""
-    f: dict = {}
-    if org_id:
-        f["org_id"] = org_id
-    elif user_id:
-        f["user_id"] = user_id
+def _build_scope_filter(user_id: str, document_ids: list[str] | None, org_id: str | None, namespace: str = "KnowledgeStore") -> dict:
+    """Build a MongoDB filter dict for user/org/doc/namespace scoping."""
+    f: dict = {"namespace": namespace}
+    if namespace == "ContextLibrary":
+        scope_conditions: list[dict] = [{"user_id": "system"}]
+        if org_id:
+            scope_conditions.append({"org_id": org_id})
+        if user_id:
+            scope_conditions.append({"user_id": user_id})
+        f["$or"] = scope_conditions
+    else:
+        if org_id:
+            f["org_id"] = org_id
+        elif user_id:
+            f["user_id"] = user_id
     if document_ids:
         f["doc_id"] = {"$in": document_ids}
     return f
 
 
-async def _vector_search(question: str, user_id: str, document_ids: list[str] | None, org_id: str | None) -> list[dict]:
+async def _vector_search(question: str, user_id: str, document_ids: list[str] | None, org_id: str | None, namespace: str = "KnowledgeStore") -> list[dict]:
     """Semantic vector search via Atlas $vectorSearch."""
     db = get_db()
     q_embedding = (await _embed([question]))[0]
-    vs_filter = _build_scope_filter(user_id, document_ids, org_id)
+    vs_filter = _build_scope_filter(user_id, document_ids, org_id, namespace)
 
     pipeline = [
         {
@@ -107,10 +121,10 @@ async def _vector_search(question: str, user_id: str, document_ids: list[str] | 
     return chunks
 
 
-async def _keyword_search(question: str, user_id: str, document_ids: list[str] | None, org_id: str | None) -> list[dict]:
+async def _keyword_search(question: str, user_id: str, document_ids: list[str] | None, org_id: str | None, namespace: str = "KnowledgeStore") -> list[dict]:
     """Full-text keyword search via MongoDB $text index."""
     db = get_db()
-    scope = _build_scope_filter(user_id, document_ids, org_id)
+    scope = _build_scope_filter(user_id, document_ids, org_id, namespace)
     query_filter = {**scope, "$text": {"$search": question}}
 
     pipeline = [
@@ -197,16 +211,16 @@ async def _rerank(question: str, chunks: list[dict]) -> list[dict]:
     return chunks
 
 
-async def retrieve(question: str, user_id: str = "", document_ids: list[str] | None = None, org_id: str | None = None) -> list[dict]:
+async def retrieve(question: str, user_id: str = "", document_ids: list[str] | None = None, org_id: str | None = None, namespace: str = "KnowledgeStore") -> list[dict]:
     start = time.time()
 
     # Vector search (always)
-    vector_chunks = await _vector_search(question, user_id, document_ids, org_id)
+    vector_chunks = await _vector_search(question, user_id, document_ids, org_id, namespace)
 
     # Hybrid: merge with keyword search
     if settings.enable_hybrid_search and vector_chunks is not None:
         try:
-            keyword_chunks = await _keyword_search(question, user_id, document_ids, org_id)
+            keyword_chunks = await _keyword_search(question, user_id, document_ids, org_id, namespace)
             chunks = _merge_results(vector_chunks, keyword_chunks, settings.retrieval_top_k)
         except Exception:
             logger.warning("Keyword search failed, using vector results only", exc_info=True)

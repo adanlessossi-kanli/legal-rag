@@ -38,6 +38,10 @@ INDEX_DEFINITION = {
                 "type": "filter",
                 "path": "doc_id",
             },
+            {
+                "type": "filter",
+                "path": "namespace",
+            },
         ],
     },
 }

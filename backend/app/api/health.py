@@ -51,6 +51,12 @@ async def health(deep: bool = False):
         checks["agents"] = "agents_unavailable"
         logger.exception("Deep health check: Agents failed")
 
+    try:
+        from app.core.circuit_breaker import openai_circuit
+        checks["circuit_breaker"] = openai_circuit.to_dict()
+    except Exception:
+        checks["circuit_breaker"] = "unknown"
+
     status = "ok" if all(v == "ok" or v == "disabled" for v in checks.values() if isinstance(v, str)) else "degraded"
     if isinstance(checks.get("agents"), dict):
         if any(v != "ok" for v in checks["agents"].values()):

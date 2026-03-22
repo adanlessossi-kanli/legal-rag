@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timezone
 
 from bson import ObjectId
+from bson.errors import InvalidId
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from slowapi import Limiter
@@ -22,9 +23,16 @@ router = APIRouter(dependencies=[Depends(get_current_user)])
 limiter = Limiter(key_func=get_remote_address)
 
 
+def _safe_oid(value: str) -> ObjectId:
+    try:
+        return ObjectId(value)
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid ID format")
+
+
 async def _load_history(conversation_id: str, user_id: ObjectId) -> list[ChatMessage]:
     db = get_db()
-    convo = await db.conversations.find_one({"_id": ObjectId(conversation_id), "user_id": user_id})
+    convo = await db.conversations.find_one({"_id": _safe_oid(conversation_id), "user_id": user_id})
     if not convo:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
@@ -52,7 +60,7 @@ async def _create_conversation(user_id: ObjectId, question: str) -> str:
 
 async def _save_message(conversation_id: str, user_id: ObjectId, role: str, content: str, sources: list | None = None) -> None:
     db = get_db()
-    oid = ObjectId(conversation_id)
+    oid = _safe_oid(conversation_id)
     await db.messages.insert_one({
         "conversation_id": oid,
         "user_id": user_id,

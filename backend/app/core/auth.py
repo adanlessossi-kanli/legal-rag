@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from bson import ObjectId
+from bson.errors import InvalidId
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
@@ -14,6 +15,14 @@ from app.core.database import get_db
 logger = logging.getLogger(__name__)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
+
+
+def safe_object_id(value: str) -> ObjectId:
+    """Validate and convert a string to ObjectId, raising 400 on invalid input."""
+    try:
+        return ObjectId(value)
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid ID format")
 
 
 def _prehash(password: str) -> bytes:
@@ -61,7 +70,10 @@ async def get_current_user(token: str | None = Depends(oauth2_scheme)) -> dict:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
 
     db = get_db()
-    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    try:
+        user = await db.users.find_one({"_id": ObjectId(user_id)})
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     return user

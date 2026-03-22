@@ -1,6 +1,7 @@
 import logging
 
 from bson import ObjectId
+from bson.errors import InvalidId
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.auth import get_current_user
@@ -10,6 +11,13 @@ from app.models.schemas import ConversationDetail, ConversationSummary, DeleteRe
 
 logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(get_current_user)])
+
+
+def _safe_oid(value: str) -> ObjectId:
+    try:
+        return ObjectId(value)
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid ID format")
 
 
 @router.get("/conversations", response_model=PaginatedConversations)
@@ -32,7 +40,7 @@ async def list_conversations(
 @router.get("/conversations/{conversation_id}", response_model=ConversationDetail)
 async def get_conversation(conversation_id: str, user: dict = Depends(get_current_user)):
     db = get_db()
-    convo = await db.conversations.find_one({"_id": ObjectId(conversation_id), "user_id": user["_id"]})
+    convo = await db.conversations.find_one({"_id": _safe_oid(conversation_id), "user_id": user["_id"]})
     if not convo:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
@@ -52,7 +60,7 @@ async def get_conversation(conversation_id: str, user: dict = Depends(get_curren
 @router.delete("/conversations/{conversation_id}", response_model=DeleteResponse)
 async def delete_conversation(conversation_id: str, user: dict = Depends(get_current_user)):
     db = get_db()
-    oid = ObjectId(conversation_id)
+    oid = _safe_oid(conversation_id)
     convo = await db.conversations.find_one({"_id": oid, "user_id": user["_id"]})
     if not convo:
         raise HTTPException(status_code=404, detail="Conversation not found")

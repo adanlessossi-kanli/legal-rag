@@ -11,6 +11,7 @@ from app.core.auth import (
     hash_token,
     verify_password,
 )
+from app.core.audit import log_action
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.schemas import (
@@ -105,7 +106,11 @@ async def refresh(req: RefreshRequest):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token already used or revoked")
 
     from bson import ObjectId
-    user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+    from bson.errors import InvalidId
+    try:
+        user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 

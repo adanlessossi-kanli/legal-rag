@@ -6,6 +6,7 @@ from contextvars import ContextVar
 from openai import APIConnectionError, APITimeoutError, RateLimitError
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
+from app.core.circuit_breaker import CircuitOpenError, openai_circuit
 from app.core.clients import openai_client
 from app.core.config import settings
 from app.core.metrics import LLM_ERRORS, LLM_LATENCY, LLM_TOKENS
@@ -35,12 +36,12 @@ _retry = retry(
 )
 
 
-def _build_messages(question: str, context_chunks: list[dict], history: list[ChatMessage]) -> list[dict]:
+def _build_messages(question: str, context_chunks: list[dict], history: list[ChatMessage], system_prompt: str | None = None) -> list[dict]:
     context = "\n\n".join(
         f"[Source: {c['metadata'].get('source', 'unknown')}, Page {c['metadata'].get('page', '?')}]\n{c['text']}"
         for c in context_chunks
     )
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages = [{"role": "system", "content": system_prompt or SYSTEM_PROMPT}]
     for msg in history:
         messages.append({"role": msg.role, "content": msg.content})
     messages.append({"role": "user", "content": f"Context:\n{context}\n\nQuestion: {question}"})
@@ -60,16 +61,20 @@ async def _track_usage(model: str, operation: str, usage) -> None:
 
 
 @_retry
-async def generate(question: str, context_chunks: list[dict], history: list[ChatMessage]) -> str:
-    messages = _build_messages(question, context_chunks, history)
+async def generate(question: str, context_chunks: list[dict], history: list[ChatMessage], system_prompt: str | None = None) -> str:
+    messages = _build_messages(question, context_chunks, history, system_prompt=system_prompt)
 
     start = time.time()
     try:
-        resp = await openai_client.chat.completions.create(
-            model=settings.llm_model,
-            messages=messages,
-            temperature=0.1,
-        )
+        async with openai_circuit:
+            resp = await openai_client.chat.completions.create(
+                model=settings.llm_model,
+                messages=messages,
+                temperature=0.1,
+            )
+    except CircuitOpenError:
+        LLM_ERRORS.labels("generate").inc()
+        raise
     except Exception:
         LLM_ERRORS.labels("generate").inc()
         raise
@@ -83,19 +88,21 @@ async def generate(question: str, context_chunks: list[dict], history: list[Chat
 
 
 @_retry
-async def generate_stream(question: str, context_chunks: list[dict], history: list[ChatMessage]) -> AsyncGenerator[str, None]:
-    messages = _build_messages(question, context_chunks, history)
+async def generate_stream(question: str, context_chunks: list[dict], history: list[ChatMessage], system_prompt: str | None = None) -> AsyncGenerator[str, None]:
+    messages = _build_messages(question, context_chunks, history, system_prompt=system_prompt)
 
     stream = await openai_client.chat.completions.create(
         model=settings.llm_model,
         messages=messages,
         temperature=0.1,
         stream=True,
+        stream_options={"include_usage": True},
     )
     async for chunk in stream:
-        delta = chunk.choices[0].delta
-        if delta.content:
-            yield delta.content
+        if chunk.choices and chunk.choices[0].delta.content:
+            yield chunk.choices[0].delta.content
+        if hasattr(chunk, "usage") and chunk.usage and hasattr(chunk.usage, "prompt_tokens") and isinstance(chunk.usage.prompt_tokens, int):
+            await _track_usage(settings.llm_model, "generate_stream", chunk.usage)
 
 
 @_retry
@@ -103,15 +110,19 @@ async def rewrite_query(question: str, history: list[ChatMessage]) -> str:
     history_text = "\n".join(f"{m.role}: {m.content}" for m in history)
     start = time.time()
     try:
-        resp = await openai_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": REWRITE_PROMPT},
-                {"role": "user", "content": f"History:\n{history_text}\n\nFollow-up question: {question}\n\nStandalone question:"},
-            ],
-            temperature=0,
-            max_tokens=256,
-        )
+        async with openai_circuit:
+            resp = await openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": REWRITE_PROMPT},
+                    {"role": "user", "content": f"History:\n{history_text}\n\nFollow-up question: {question}\n\nStandalone question:"},
+                ],
+                temperature=0,
+                max_tokens=256,
+            )
+    except CircuitOpenError:
+        LLM_ERRORS.labels("rewrite").inc()
+        raise
     except Exception:
         LLM_ERRORS.labels("rewrite").inc()
         raise

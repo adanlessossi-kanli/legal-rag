@@ -182,11 +182,13 @@ export async function chatStream(
 
     for (const line of lines) {
       if (!line.startsWith("data: ")) continue;
-      const data = JSON.parse(line.slice(6));
-      if (data.type === "sources") onSources(data.sources);
-      else if (data.type === "token") onToken(data.token);
-      else if (data.type === "conversation_id") onConversationId(data.conversation_id);
-      else if (data.type === "agent_status" && onAgentStatus) onAgentStatus(data.agent, data.status);
+      try {
+        const data = JSON.parse(line.slice(6));
+        if (data.type === "sources") onSources(data.sources);
+        else if (data.type === "token") onToken(data.token);
+        else if (data.type === "conversation_id") onConversationId(data.conversation_id);
+        else if (data.type === "agent_status" && onAgentStatus) onAgentStatus(data.agent, data.status);
+      } catch { /* ignore malformed SSE data */ }
     }
   }
 }
@@ -259,6 +261,11 @@ export function connectIngestionWs(onEvent: (event: IngestionEvent) => void): ((
 
   const wsBase = API_BASE.replace(/^http/, "ws");
   const ws = new WebSocket(`${wsBase}/api/ws/ingestion?token=${token}`);
+  let disposed = false;
+
+  ws.onopen = () => {
+    if (disposed) ws.close();
+  };
 
   ws.onmessage = (e) => {
     try {
@@ -267,7 +274,63 @@ export function connectIngestionWs(onEvent: (event: IngestionEvent) => void): ((
     } catch { /* ignore parse errors */ }
   };
 
-  ws.onerror = () => ws.close();
+  ws.onerror = () => {
+    if (ws.readyState === WebSocket.OPEN) ws.close();
+  };
 
-  return () => ws.close();
+  return () => {
+    disposed = true;
+    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CLOSING) {
+      ws.close();
+    }
+  };
+}
+
+// --- Feedback ---
+
+export async function submitFeedback(
+  conversationId: string,
+  messageId: string,
+  rating: number,
+  comment?: string,
+): Promise<{ id: string }> {
+  return request<{ id: string }>("/api/feedback", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ conversation_id: conversationId, message_id: messageId, rating, comment }),
+  });
+}
+
+// --- Export ---
+
+export async function exportConversation(id: string, format: "markdown" | "json" = "markdown"): Promise<Blob> {
+  const res = await fetch(`${API_BASE}/api/conversations/${id}/export?format=${format}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Export failed");
+  return res.blob();
+}
+
+// --- Document search ---
+
+export async function searchDocuments(
+  params: {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    status?: string;
+    fileType?: string;
+    sortBy?: string;
+    sortOrder?: string;
+  } = {},
+): Promise<PaginatedResponse<Document>> {
+  const query = new URLSearchParams();
+  if (params.page) query.set("page", String(params.page));
+  if (params.pageSize) query.set("page_size", String(params.pageSize));
+  if (params.search) query.set("search", params.search);
+  if (params.status) query.set("status", params.status);
+  if (params.fileType) query.set("file_type", params.fileType);
+  if (params.sortBy) query.set("sort_by", params.sortBy);
+  if (params.sortOrder) query.set("sort_order", params.sortOrder);
+  return request<PaginatedResponse<Document>>(`/api/documents?${query.toString()}`);
 }
