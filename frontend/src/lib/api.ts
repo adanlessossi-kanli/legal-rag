@@ -285,3 +285,52 @@ export function connectIngestionWs(onEvent: (event: IngestionEvent) => void): ((
     }
   };
 }
+
+// --- Feedback ---
+
+export async function submitFeedback(
+  conversationId: string,
+  messageId: string,
+  rating: number,
+  comment?: string,
+): Promise<{ id: string }> {
+  return request<{ id: string }>("/api/feedback", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ conversation_id: conversationId, message_id: messageId, rating, comment }),
+  });
+}
+
+// --- Export ---
+
+export async function exportConversation(id: string, format: "markdown" | "json" = "markdown"): Promise<Blob> {
+  const res = await fetch(`${API_BASE}/api/conversations/${id}/export?format=${format}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Export failed");
+  return res.blob();
+}
+
+// --- Document search ---
+
+export async function searchDocuments(
+  params: {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    status?: string;
+    fileType?: string;
+    sortBy?: string;
+    sortOrder?: string;
+  } = {},
+): Promise<PaginatedResponse<Document>> {
+  const query = new URLSearchParams();
+  if (params.page) query.set("page", String(params.page));
+  if (params.pageSize) query.set("page_size", String(params.pageSize));
+  if (params.search) query.set("search", params.search);
+  if (params.status) query.set("status", params.status);
+  if (params.fileType) query.set("file_type", params.fileType);
+  if (params.sortBy) query.set("sort_by", params.sortBy);
+  if (params.sortOrder) query.set("sort_order", params.sortOrder);
+  return request<PaginatedResponse<Document>>(`/api/documents?${query.toString()}`);
+}

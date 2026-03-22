@@ -11,6 +11,7 @@ from app.core.auth import (
     hash_token,
     verify_password,
 )
+from app.core.audit import log_action
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.schemas import (

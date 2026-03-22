@@ -56,6 +56,21 @@ class Settings(BaseSettings):
     ingestion_max_retries: int = 3
     ingestion_retry_delay_seconds: int = 30
 
+    # Circuit breaker
+    circuit_breaker_failure_threshold: int = 5
+    circuit_breaker_recovery_timeout: int = 30
+
+    # Audit log
+    enable_audit_log: bool = True
+
+    # Document versioning
+    enable_document_versioning: bool = True
+    max_document_versions: int = 10
+
+    # CSRF
+    enable_csrf_protection: bool = True
+    csrf_trusted_origins: str = "http://localhost:3000"
+
     # MongoDB
     mongodb_host: str = "localhost"
     mongodb_port: int = 27017

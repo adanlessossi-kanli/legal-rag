@@ -6,6 +6,7 @@ from contextvars import ContextVar
 from openai import APIConnectionError, APITimeoutError, RateLimitError
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
+from app.core.circuit_breaker import CircuitOpenError, openai_circuit
 from app.core.clients import openai_client
 from app.core.config import settings
 from app.core.metrics import LLM_ERRORS, LLM_LATENCY, LLM_TOKENS
@@ -65,11 +66,15 @@ async def generate(question: str, context_chunks: list[dict], history: list[Chat
 
     start = time.time()
     try:
-        resp = await openai_client.chat.completions.create(
-            model=settings.llm_model,
-            messages=messages,
-            temperature=0.1,
-        )
+        async with openai_circuit:
+            resp = await openai_client.chat.completions.create(
+                model=settings.llm_model,
+                messages=messages,
+                temperature=0.1,
+            )
+    except CircuitOpenError:
+        LLM_ERRORS.labels("generate").inc()
+        raise
     except Exception:
         LLM_ERRORS.labels("generate").inc()
         raise
@@ -105,15 +110,19 @@ async def rewrite_query(question: str, history: list[ChatMessage]) -> str:
     history_text = "\n".join(f"{m.role}: {m.content}" for m in history)
     start = time.time()
     try:
-        resp = await openai_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": REWRITE_PROMPT},
-                {"role": "user", "content": f"History:\n{history_text}\n\nFollow-up question: {question}\n\nStandalone question:"},
-            ],
-            temperature=0,
-            max_tokens=256,
-        )
+        async with openai_circuit:
+            resp = await openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": REWRITE_PROMPT},
+                    {"role": "user", "content": f"History:\n{history_text}\n\nFollow-up question: {question}\n\nStandalone question:"},
+                ],
+                temperature=0,
+                max_tokens=256,
+            )
+    except CircuitOpenError:
+        LLM_ERRORS.labels("rewrite").inc()
+        raise
     except Exception:
         LLM_ERRORS.labels("rewrite").inc()
         raise

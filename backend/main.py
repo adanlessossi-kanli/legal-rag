@@ -11,13 +11,13 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from app.api import auth, chat, conversations, documents, health, metrics, organizations, upload, ws, blueprints
+from app.api import auth, chat, conversations, documents, health, metrics, organizations, upload, ws, blueprints, audit, feedback, export
 from app.core.cache import close_cache, connect_cache
 from app.core.config import settings
 from app.core.database import close_db, connect_db
 from app.core.ingestion_queue import start_worker, stop_worker
 from app.core.metrics import PrometheusMiddleware
-from app.core.security import SecurityHeadersMiddleware
+from app.core.security import CSRFMiddleware, SecurityHeadersMiddleware
 
 handler = logging.StreamHandler()
 if settings.log_format == "json":
@@ -53,6 +53,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(PrometheusMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(CSRFMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -101,3 +102,6 @@ app.include_router(metrics.router, prefix="/api")
 app.include_router(organizations.router, prefix="/api")
 app.include_router(ws.router, prefix="/api")
 app.include_router(blueprints.router, prefix="/api")
+app.include_router(audit.router, prefix="/api")
+app.include_router(feedback.router, prefix="/api")
+app.include_router(export.router, prefix="/api")

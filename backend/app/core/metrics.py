@@ -9,8 +9,11 @@ from starlette.responses import Response
 # Normalize paths to prevent label cardinality explosion
 _PATH_PATTERNS = [
     (re.compile(r"/api/documents/[^/]+/status"), "/api/documents/{id}/status"),
+    (re.compile(r"/api/documents/[^/]+/versions"), "/api/documents/{id}/versions"),
     (re.compile(r"/api/documents/[^/]+"), "/api/documents/{id}"),
+    (re.compile(r"/api/conversations/[^/]+/export"), "/api/conversations/{id}/export"),
     (re.compile(r"/api/conversations/[^/]+"), "/api/conversations/{id}"),
+    (re.compile(r"/api/organizations/[^/]+/members/[^/]+/role"), "/api/organizations/{id}/members/{uid}/role"),
     (re.compile(r"/api/organizations/[^/]+/members/[^/]+"), "/api/organizations/{id}/members/{uid}"),
     (re.compile(r"/api/organizations/[^/]+/members"), "/api/organizations/{id}/members"),
     (re.compile(r"/api/organizations/[^/]+"), "/api/organizations/{id}"),

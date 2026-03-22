@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import AgentIndicator from "@/components/AgentIndicator";
 import ChatMessage from "@/components/ChatMessage";
 import ChatInput from "@/components/ChatInput";
+import ExportButton from "@/components/ExportButton";
 import LoadingIndicator from "@/components/LoadingIndicator";
 import { chatStream, getConversation, getDocuments, type Message, type Source, type Document } from "@/lib/api";
 
@@ -240,6 +241,7 @@ export default function ChatPage() {
         </div>
         <div className="flex items-center gap-2">
           <DocumentScopeSelector documents={documents} selected={selectedDocIds} onChange={setSelectedDocIds} />
+          {hasMessages && <ExportButton conversationId={state.conversationId} />}
           {hasMessages && (
             <button
               onClick={handleClear}
@@ -259,7 +261,7 @@ export default function ChatPage() {
         {hasMessages ? (
           <div className="space-y-4 pb-4">
             {state.messages.map((msg) => (
-              <ChatMessage key={msg.id} role={msg.role} content={msg.content} sources={msg.sources} />
+              <ChatMessage key={msg.id} role={msg.role} content={msg.content} sources={msg.sources} messageId={msg.id} conversationId={state.conversationId} />
             ))}
             {state.isLoading && state.activeAgent && <AgentIndicator agent={state.activeAgent} />}
             {state.isLoading && state.messages[state.messages.length - 1]?.content === "" && <LoadingIndicator />}

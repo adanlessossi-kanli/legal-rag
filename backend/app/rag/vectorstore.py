@@ -4,6 +4,7 @@ import time
 from openai import APIConnectionError, APITimeoutError, RateLimitError
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
+from app.core.circuit_breaker import CircuitOpenError, openai_circuit
 from app.core.clients import openai_client
 from app.core.config import settings
 from app.core.database import get_db
@@ -25,7 +26,11 @@ _retry = retry(
 async def _embed(texts: list[str]) -> list[list[float]]:
     start = time.time()
     try:
-        resp = await openai_client.embeddings.create(input=texts, model=settings.embedding_model)
+        async with openai_circuit:
+            resp = await openai_client.embeddings.create(input=texts, model=settings.embedding_model)
+    except CircuitOpenError:
+        LLM_ERRORS.labels("embedding").inc()
+        raise
     except Exception:
         LLM_ERRORS.labels("embedding").inc()
         raise

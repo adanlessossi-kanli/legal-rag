@@ -1,5 +1,4 @@
 import logging
-import uuid
 from datetime import datetime, timezone
 
 from bson import ObjectId
@@ -7,6 +6,7 @@ from bson.errors import InvalidId
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.auth import get_current_user
+from app.core.audit import log_action
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.schemas import (
@@ -15,6 +15,7 @@ from app.models.schemas import (
     OrgDetail,
     OrgMember,
     OrgSummary,
+    UpdateMemberRoleRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -149,4 +150,42 @@ async def remove_member(org_id: str, user_id: str, user: dict = Depends(get_curr
         raise HTTPException(status_code=404, detail="Member not found")
 
     await db.users.update_one({"_id": target_oid}, {"$unset": {"org_id": ""}})
+
+    if settings.enable_audit_log:
+        await log_action(
+            action="member.remove",
+            user_id=str(user["_id"]),
+            resource_type="organization",
+            resource_id=org_id,
+            detail=f"Removed member {user_id}",
+            org_id=org_id,
+        )
+
     return {"detail": "Member removed"}
+
+
+@router.put("/{org_id}/members/{user_id}/role", response_model=OrgMember)
+async def update_member_role(
+    org_id: str, user_id: str, body: UpdateMemberRoleRequest, user: dict = Depends(get_current_user),
+):
+    db = get_db()
+    oid = _safe_oid(org_id)
+
+    membership = await db.org_members.find_one({"org_id": oid, "user_id": user["_id"]})
+    if not membership or membership["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can change roles")
+
+    org = await db.organizations.find_one({"_id": oid})
+    if str(org["owner_id"]) == user_id:
+        raise HTTPException(status_code=400, detail="Cannot change the owner's role")
+
+    target_oid = _safe_oid(user_id)
+    result = await db.org_members.update_one(
+        {"org_id": oid, "user_id": target_oid},
+        {"$set": {"role": body.role}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Member not found")
+
+    target = await db.users.find_one({"_id": target_oid})
+    return OrgMember(user_id=str(target["_id"]), email=target["email"], name=target["name"], role=body.role)

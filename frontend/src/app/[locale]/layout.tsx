@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { locales, type Locale } from "@/i18n/config";
 import AuthGuard from "@/components/AuthGuard";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import OfflineBanner from "@/components/OfflineBanner";
 
 export function generateStaticParams() {
   return locales.map((locale) => ({ locale }));
@@ -38,6 +39,7 @@ export default async function LocaleLayout({
   return (
     <NextIntlClientProvider locale={locale} messages={messages}>
       <ErrorBoundary>
+        <OfflineBanner />
         <AuthGuard>{children}</AuthGuard>
       </ErrorBoundary>
     </NextIntlClientProvider>
