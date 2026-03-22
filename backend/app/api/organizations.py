@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime, timezone
 
 from bson import ObjectId
+from bson.errors import InvalidId
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.auth import get_current_user
@@ -18,6 +19,13 @@ from app.models.schemas import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/organizations", dependencies=[Depends(get_current_user)])
+
+
+def _safe_oid(value: str) -> ObjectId:
+    try:
+        return ObjectId(value)
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid ID format")
 
 
 @router.post("", response_model=OrgDetail, status_code=201)
@@ -71,7 +79,7 @@ async def list_orgs(user: dict = Depends(get_current_user)):
 @router.get("/{org_id}", response_model=OrgDetail)
 async def get_org(org_id: str, user: dict = Depends(get_current_user)):
     db = get_db()
-    oid = ObjectId(org_id)
+    oid = _safe_oid(org_id)
     membership = await db.org_members.find_one({"org_id": oid, "user_id": user["_id"]})
     if not membership:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -95,7 +103,7 @@ async def get_org(org_id: str, user: dict = Depends(get_current_user)):
 @router.post("/{org_id}/members", response_model=OrgMember, status_code=201)
 async def invite_member(org_id: str, req: InviteMemberRequest, user: dict = Depends(get_current_user)):
     db = get_db()
-    oid = ObjectId(org_id)
+    oid = _safe_oid(org_id)
 
     # Only admins can invite
     membership = await db.org_members.find_one({"org_id": oid, "user_id": user["_id"]})
@@ -125,7 +133,7 @@ async def invite_member(org_id: str, req: InviteMemberRequest, user: dict = Depe
 @router.delete("/{org_id}/members/{user_id}")
 async def remove_member(org_id: str, user_id: str, user: dict = Depends(get_current_user)):
     db = get_db()
-    oid = ObjectId(org_id)
+    oid = _safe_oid(org_id)
 
     membership = await db.org_members.find_one({"org_id": oid, "user_id": user["_id"]})
     if not membership or membership["role"] != "admin":
@@ -135,7 +143,7 @@ async def remove_member(org_id: str, user_id: str, user: dict = Depends(get_curr
     if str(org["owner_id"]) == user_id:
         raise HTTPException(status_code=400, detail="Cannot remove the owner")
 
-    target_oid = ObjectId(user_id)
+    target_oid = _safe_oid(user_id)
     result = await db.org_members.delete_one({"org_id": oid, "user_id": target_oid})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Member not found")

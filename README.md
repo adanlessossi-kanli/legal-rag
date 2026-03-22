@@ -155,6 +155,10 @@ For production with Atlas, create the vector search index manually:
     {
       "type": "filter",
       "path": "doc_id"
+    },
+    {
+      "type": "filter",
+      "path": "namespace"
     }
   ]
 }
@@ -284,6 +288,12 @@ Test modules:
 - `test_orchestrator.py` — orchestrator: end-to-end multi-agent query flow
 - `test_agent_integration.py` — cross-agent integration scenarios
 - `test_metrics.py` — Prometheus metrics endpoint, per-user cost tracking
+- `test_registry.py` — agent registry: register, get, list, capabilities
+- `test_planner.py` — planner: LLM plan generation, fallback, validation, parsing
+- `test_executor.py` — executor: 3-stage pipeline, placeholder resolution, blueprint flow
+- `test_tracer.py` — execution trace: step lifecycle, finalize, serialization
+- `test_seed.py` — default blueprint seeding, idempotency
+- `test_blueprints_api.py` — blueprint CRUD, auth, default protection, validation
 - `test_integration.py` — real MongoDB `$vectorSearch` end-to-end (requires Docker)
 
 ## Configuration
@@ -337,6 +347,10 @@ All backend config is via environment variables (set in `backend/.env`):
 | `KEYWORD_SEARCH_LIMIT` | `10`             | Max keyword search results to merge |
 | `ENABLE_RERANKING` | `true`               | Enable LLM-based reranking       |
 | `RERANK_MODEL` | `gpt-4o-mini`             | Model for reranking passages     |
+| `ENABLE_CONTEXT_ENGINE` | `true`          | Enable LLM-based query planning  |
+| `PLANNER_MODEL` | `gpt-4o`                 | Model for plan generation        |
+| `PLANNER_TIMEOUT` | `15`                   | Planner LLM timeout (seconds)    |
+| `DEFAULT_NAMESPACE` | `KnowledgeStore`     | Default vector namespace         |
 
 Frontend config (set in `frontend/.env.local`):
 
@@ -369,6 +383,11 @@ Frontend config (set in `frontend/.env.local`):
 | `GET`    | `/api/organizations/{id}`   | Yes  | Get organization details + members   |
 | `POST`   | `/api/organizations/{id}/members` | Yes | Invite a member (admin only)   |
 | `DELETE` | `/api/organizations/{id}/members/{uid}` | Yes | Remove a member (admin only) |
+| `POST`   | `/api/blueprints`           | Yes  | Create a blueprint                   |
+| `GET`    | `/api/blueprints`           | Yes  | List blueprints (paginated)          |
+| `GET`    | `/api/blueprints/{id}`      | Yes  | Get blueprint details                |
+| `PUT`    | `/api/blueprints/{id}`      | Yes  | Update a blueprint                   |
+| `DELETE` | `/api/blueprints/{id}`      | Yes  | Delete a blueprint                   |
 | `WS`     | `/api/ws/ingestion`         | Yes* | WebSocket for ingestion notifications |
 
 ### POST /api/auth/register
@@ -420,6 +439,7 @@ If `conversation_id` is omitted, a new conversation is created. If provided, the
 
 Streaming (`?stream=true`) returns SSE events:
 ```
+data: {"type": "agent_status", "agent": "planner", "status": "working"}
 data: {"type": "agent_status", "agent": "researcher", "status": "working"}
 data: {"type": "sources", "sources": [...]}
 data: {"type": "agent_status", "agent": "writer", "status": "working"}
@@ -494,7 +514,8 @@ legal-rag/
 │   ├── migrations/
 │   │   ├── runner.py       # Migration runner (apply/status)
 │   │   └── versions/       # Versioned migration scripts
-│   │       └── 20250101_000000_initial_schema.py
+│   │       ├── 20250101_000000_initial_schema.py
+│   │       └── 20250615_120000_add_context_engine.py
 │   ├── app/
 │   │   ├── agents/         # Multi-agent system
 │   │   │   ├── base.py     #   BaseAgent, AgentError, tool registry
@@ -512,6 +533,7 @@ legal-rag/
 │   │   │   ├── metrics.py  #   Prometheus scrape + usage endpoints
 │   │   │   ├── organizations.py # org CRUD + member management
 │   │   │   ├── upload.py   #   file upload (org/user-scoped)
+│   │   │   ├── blueprints.py # blueprint CRUD (create, list, get, update, delete)
 │   │   │   └── ws.py       #   WebSocket ingestion notifications
 │   │   ├── core/           # Infrastructure
 │   │   │   ├── auth.py     #   JWT auth dependency (get_current_user, get_org_id)
@@ -525,8 +547,14 @@ legal-rag/
 │   │   │   ├── notifications.py # WebSocket connection manager
 │   │   │   ├── usage.py    #   Per-user OpenAI cost tracking
 │   │   │   └── security.py #   Account lockout + CSP middleware
+│   │   ├── engine/         # Context Engine (Plan → Execute)
+│   │   │   ├── planner.py  #   LLM-based plan generation + fallback
+│   │   │   ├── executor.py #   3-stage pipeline (blueprint → specialists → writer)
+│   │   │   ├── tracer.py   #   Flight recorder for pipeline execution
+│   │   │   ├── registry.py #   Agent capability registry (Researcher, Summarizer)
+│   │   │   └── seed.py     #   Default blueprint seeding
 │   │   ├── models/
-│   │   │   └── schemas.py  #   Pydantic schemas (auth, chat, docs, conversations)
+│   │   │   └── schemas.py  #   Pydantic schemas (auth, chat, docs, conversations, blueprints)
 │   │   └── rag/            # RAG pipeline
 │   │       ├── chunker.py  #   Text splitting
 │   │       ├── llm.py      #   OpenAI generation + query rewriting
@@ -550,6 +578,12 @@ legal-rag/
 │   │   ├── test_orchestrator.py# Orchestrator end-to-end flow
 │   │   ├── test_agent_integration.py # Cross-agent integration
 │   │   ├── test_metrics.py     # Prometheus metrics + cost tracking
+│   │   ├── test_registry.py    # Agent registry: register, get, list
+│   │   ├── test_planner.py     # Planner: LLM plan, fallback, validation
+│   │   ├── test_executor.py    # Executor: 3-stage pipeline, placeholders
+│   │   ├── test_tracer.py      # Execution trace lifecycle
+│   │   ├── test_seed.py        # Default blueprint seeding
+│   │   ├── test_blueprints_api.py # Blueprint CRUD endpoints
 │   │   └── test_integration.py # Real MongoDB $vectorSearch (Docker)
 │   ├── main.py             # FastAPI entrypoint
 │   ├── pytest.ini          # Pytest configuration
@@ -600,13 +634,36 @@ The backend uses a multi-agent architecture where specialized agents collaborate
 
 | Agent | Role |
 |-------|------|
-| Orchestrator | Coordinates the query pipeline, manages timeouts (90s), delegates to specialized agents |
+| Orchestrator | Coordinates the query pipeline via Context Engine (Plan → Execute), manages timeouts (90s), delegates to specialized agents |
 | Researcher | Rewrites follow-up questions into standalone queries, retrieves context via Librarian, triggers Summarizer for long contexts |
-| Librarian | Manages document lifecycle — search (vector retrieval), ingest (load → chunk → embed → store), and remove |
-| Writer | Generates answers from retrieved context using GPT-4o, supports sync and streaming modes |
+| Librarian | Manages document lifecycle — search (vector retrieval, namespace-aware), ingest (load → chunk → embed → store), remove, and blueprint loading from ContextLibrary |
+| Writer | Generates answers from retrieved context using GPT-4o, supports sync and streaming modes, applies blueprint styling when available |
 | Summarizer | Condenses long chunks (>2000 chars) using GPT-4o-mini when total context exceeds the configurable threshold |
 
 Agents communicate via a tool-based protocol: each agent registers named tools, and other agents invoke them through `call_tool()`. All tool calls are logged with timing and status.
+
+### Context Engine
+
+The query pipeline uses a two-phase Plan → Execute architecture:
+
+1. **Plan** — The Planner uses GPT-4o to decompose the user's question into an `intent_query` (desired output style) and a `topic_query` (factual subject), then generates a step-by-step execution plan selecting from the Agent Registry (Researcher, Summarizer). Falls back to a hardcoded single-step plan if the LLM fails or `ENABLE_CONTEXT_ENGINE=false`.
+2. **Execute** — The Executor runs a 3-stage pipeline:
+   - **Stage 1 (Fixed):** Librarian searches the ContextLibrary namespace for a matching blueprint based on `intent_query`.
+   - **Stage 2 (Planned):** Specialist agents (Researcher, Summarizer) execute the planned steps with `$$PLACEHOLDER$$` resolution for inter-step dependencies.
+   - **Stage 3 (Fixed):** Writer generates the final answer, optionally styled by the blueprint's `scene_goal`, `style_guide`, `structure`, `participants`, and `instruction` fields.
+3. **Trace** — Every step is recorded by the ExecutionTrace flight recorder with timing, status, and output summaries.
+
+### Blueprints
+
+Blueprints are semantic templates stored in the `blueprints` collection and embedded into the `ContextLibrary` vector namespace. Three default blueprints are seeded on first run:
+
+| Blueprint | Style |
+|-----------|-------|
+| Suspense Narrative | Short, sharp sentences with sensory details and eerie tone |
+| Technical Explanation | Formal, objective, structured (Definition → Function → Impact) |
+| Casual Summary | Informal, brief, conversational |
+
+Users can create custom blueprints via the API. The Planner's `intent_query` is used to find the best-matching blueprint via vector search.
 
 ## RAG Pipeline
 
@@ -620,6 +677,8 @@ Agents communicate via a tool-based protocol: each agent registers named tools, 
 
 ## Features
 
+- **Context Engine** — Two-phase Plan → Execute architecture. LLM-based Planner decomposes queries into intent + topic, generates execution plans from an Agent Registry. Executor runs a 3-stage pipeline (blueprint retrieval → specialist agents → writer). ExecutionTrace flight recorder logs every step with timing. Graceful fallback to single-step plan when LLM fails or feature is disabled.
+- **Blueprints** — Semantic templates (ContextLibrary namespace) that style Writer output. Three defaults seeded (Suspense Narrative, Technical Explanation, Casual Summary). Full CRUD API with ownership validation and default protection. Descriptions are vector-embedded for intent-based retrieval.
 - **Multi-agent system** — Orchestrator coordinates Researcher, Librarian, Writer, and Summarizer agents with tool-based communication, per-call logging, and 90-second timeout.
 - **Streaming chat** — Tokens stream in real-time via SSE for instant feedback, with agent status indicators (Researching → Writing).
 - **Markdown rendering** — Assistant responses render markdown (bold, lists, tables, code).

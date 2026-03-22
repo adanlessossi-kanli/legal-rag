@@ -182,11 +182,13 @@ export async function chatStream(
 
     for (const line of lines) {
       if (!line.startsWith("data: ")) continue;
-      const data = JSON.parse(line.slice(6));
-      if (data.type === "sources") onSources(data.sources);
-      else if (data.type === "token") onToken(data.token);
-      else if (data.type === "conversation_id") onConversationId(data.conversation_id);
-      else if (data.type === "agent_status" && onAgentStatus) onAgentStatus(data.agent, data.status);
+      try {
+        const data = JSON.parse(line.slice(6));
+        if (data.type === "sources") onSources(data.sources);
+        else if (data.type === "token") onToken(data.token);
+        else if (data.type === "conversation_id") onConversationId(data.conversation_id);
+        else if (data.type === "agent_status" && onAgentStatus) onAgentStatus(data.agent, data.status);
+      } catch { /* ignore malformed SSE data */ }
     }
   }
 }

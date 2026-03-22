@@ -197,3 +197,68 @@ class OrgDetail(BaseModel):
     owner_id: str
     created_at: datetime
     members: list[OrgMember]
+
+
+# --- Blueprints ---
+
+class BlueprintCreate(BaseModel):
+    name: str
+    description: str
+    content: dict
+
+    @field_validator("name")
+    @classmethod
+    def name_length(cls, v: str) -> str:
+        v = v.strip()
+        if not v or len(v) > 255:
+            raise ValueError("Name must be 1-255 characters")
+        return v
+
+    @field_validator("description")
+    @classmethod
+    def description_length(cls, v: str) -> str:
+        v = v.strip()
+        if not v or len(v) > 2000:
+            raise ValueError("Description must be 1-2000 characters")
+        return v
+
+
+class BlueprintUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    content: dict | None = None
+
+    @field_validator("name")
+    @classmethod
+    def name_length(cls, v: str | None) -> str | None:
+        if v is not None:
+            v = v.strip()
+            if not v or len(v) > 255:
+                raise ValueError("Name must be 1-255 characters")
+        return v
+
+    @field_validator("description")
+    @classmethod
+    def description_length(cls, v: str | None) -> str | None:
+        if v is not None:
+            v = v.strip()
+            if not v or len(v) > 2000:
+                raise ValueError("Description must be 1-2000 characters")
+        return v
+
+
+class BlueprintResponse(BaseModel):
+    blueprint_id: str
+    name: str
+    description: str
+    content: dict | None = None
+    is_default: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+
+class PaginatedBlueprints(BaseModel):
+    items: list[BlueprintResponse]
+    total: int
+    page: int
+    page_size: int

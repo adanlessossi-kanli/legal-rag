@@ -120,9 +120,10 @@ async def test_stream_full_flow_event_order(wired_orchestrator, mock_retrieve, m
     tokens = [t async for t in token_gen]
     assert tokens == ["Token1", " Token2"]
 
-    # Verify status event order
-    assert status_events[0] == ("researcher", "working")
-    assert status_events[1] == ("writer", "working")
+    # Verify status event order — planner runs first, then researcher, writer, done
+    assert status_events[0] == ("planner", "working")
+    assert ("researcher", "working") in status_events
+    assert ("writer", "working") in status_events
     assert status_events[-1] == ("done", "done")
 
 

@@ -22,10 +22,7 @@ async def list_documents(
     ps = min(page_size or settings.default_page_size, settings.max_page_size)
     user_id = str(user["_id"])
     org_id = get_org_id(user)
-    all_docs = await metadata.get_all_documents(user_id, org_id)
-    total = len(all_docs)
-    start = (page - 1) * ps
-    items = all_docs[start : start + ps]
+    items, total = await metadata.get_documents_paginated(user_id, org_id, page, ps)
     return PaginatedDocuments(items=items, total=total, page=page, page_size=ps)
 
 

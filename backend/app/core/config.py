@@ -46,6 +46,12 @@ class Settings(BaseSettings):
     enable_reranking: bool = True
     rerank_model: str = "gpt-4o-mini"
 
+    # Context Engine
+    enable_context_engine: bool = True
+    planner_model: str = "gpt-4o"
+    planner_timeout: int = 15
+    default_namespace: str = "KnowledgeStore"
+
     # Ingestion queue
     ingestion_max_retries: int = 3
     ingestion_retry_delay_seconds: int = 30
@@ -59,12 +65,12 @@ class Settings(BaseSettings):
     mongodb_options: str = ""
 
     # JWT
-    jwt_secret: str = "change-me-in-production"
+    jwt_secret: str
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
 
-    model_config = {"env_file": ".env"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
 settings = Settings()

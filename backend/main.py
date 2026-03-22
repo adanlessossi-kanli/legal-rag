@@ -11,7 +11,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from app.api import auth, chat, conversations, documents, health, metrics, organizations, upload, ws
+from app.api import auth, chat, conversations, documents, health, metrics, organizations, upload, ws, blueprints
 from app.core.cache import close_cache, connect_cache
 from app.core.config import settings
 from app.core.database import close_db, connect_db
@@ -57,8 +57,9 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins.split(","),
-    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
+    allow_credentials=True,
 )
 
 
@@ -99,3 +100,4 @@ app.include_router(conversations.router, prefix="/api")
 app.include_router(metrics.router, prefix="/api")
 app.include_router(organizations.router, prefix="/api")
 app.include_router(ws.router, prefix="/api")
+app.include_router(blueprints.router, prefix="/api")

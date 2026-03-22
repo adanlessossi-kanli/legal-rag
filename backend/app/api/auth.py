@@ -105,7 +105,11 @@ async def refresh(req: RefreshRequest):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token already used or revoked")
 
     from bson import ObjectId
-    user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+    from bson.errors import InvalidId
+    try:
+        user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 

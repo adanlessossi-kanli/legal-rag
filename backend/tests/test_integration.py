@@ -541,14 +541,14 @@ def test_scope_filter_user_only():
     """Scope filter with user_id only."""
     from app.rag.vectorstore import _build_scope_filter
     f = _build_scope_filter("user1", None, None)
-    assert f == {"user_id": "user1"}
+    assert f == {"namespace": "KnowledgeStore", "user_id": "user1"}
 
 
 def test_scope_filter_org_overrides_user():
     """When org_id is present, it takes precedence over user_id."""
     from app.rag.vectorstore import _build_scope_filter
     f = _build_scope_filter("user1", None, "org1")
-    assert f == {"org_id": "org1"}
+    assert f == {"namespace": "KnowledgeStore", "org_id": "org1"}
     assert "user_id" not in f
 
 
@@ -556,11 +556,21 @@ def test_scope_filter_with_doc_ids():
     """Document IDs are added to the filter."""
     from app.rag.vectorstore import _build_scope_filter
     f = _build_scope_filter("user1", ["d1", "d2"], None)
-    assert f == {"user_id": "user1", "doc_id": {"$in": ["d1", "d2"]}}
+    assert f == {"namespace": "KnowledgeStore", "user_id": "user1", "doc_id": {"$in": ["d1", "d2"]}}
 
 
 def test_scope_filter_org_with_doc_ids():
     """Org + doc_ids filter."""
     from app.rag.vectorstore import _build_scope_filter
     f = _build_scope_filter("user1", ["d1"], "org1")
-    assert f == {"org_id": "org1", "doc_id": {"$in": ["d1"]}}
+    assert f == {"namespace": "KnowledgeStore", "org_id": "org1", "doc_id": {"$in": ["d1"]}}
+
+
+def test_scope_filter_context_library():
+    """ContextLibrary namespace includes system user via $or."""
+    from app.rag.vectorstore import _build_scope_filter
+    f = _build_scope_filter("user1", None, None, namespace="ContextLibrary")
+    assert f["namespace"] == "ContextLibrary"
+    assert "$or" in f
+    assert {"user_id": "system"} in f["$or"]
+    assert {"user_id": "user1"} in f["$or"]

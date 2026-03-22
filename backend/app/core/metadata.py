@@ -1,8 +1,6 @@
 import logging
 from datetime import datetime, timezone
 
-from bson import ObjectId
-
 from app.core.database import get_db
 
 logger = logging.getLogger(__name__)
@@ -12,7 +10,7 @@ async def save_document(doc_id: str, name: str, chunk_count: int, status: str, c
     db = get_db()
     doc = {
         "doc_id": doc_id,
-        "user_id": ObjectId(user_id) if user_id else None,
+        "user_id": user_id,
         "name": name,
         "uploaded_at": datetime.now(timezone.utc),
         "chunk_count": chunk_count,
@@ -20,7 +18,7 @@ async def save_document(doc_id: str, name: str, chunk_count: int, status: str, c
         "content_hash": content_hash,
     }
     if org_id:
-        doc["org_id"] = ObjectId(org_id)
+        doc["org_id"] = org_id
     await db.documents.update_one(
         {"doc_id": doc_id},
         {"$set": doc},
@@ -30,12 +28,11 @@ async def save_document(doc_id: str, name: str, chunk_count: int, status: str, c
 
 async def get_all_documents(user_id: str, org_id: str | None = None) -> list[dict]:
     db = get_db()
-    # If user belongs to an org, show all org documents
     if org_id:
-        query = {"org_id": ObjectId(org_id)}
+        query = {"org_id": org_id}
     else:
-        query = {"user_id": ObjectId(user_id)}
-    cursor = db.documents.find(query)
+        query = {"user_id": user_id}
+    cursor = db.documents.find(query).sort("uploaded_at", -1)
     docs = []
     async for doc in cursor:
         docs.append({
@@ -46,6 +43,24 @@ async def get_all_documents(user_id: str, org_id: str | None = None) -> list[dic
             "status": doc["status"],
         })
     return docs
+
+
+async def get_documents_paginated(user_id: str, org_id: str | None, page: int, page_size: int) -> tuple[list[dict], int]:
+    db = get_db()
+    query = {"org_id": org_id} if org_id else {"user_id": user_id}
+    total = await db.documents.count_documents(query)
+    skip = (page - 1) * page_size
+    cursor = db.documents.find(query).sort("uploaded_at", -1).skip(skip).limit(page_size)
+    docs = []
+    async for doc in cursor:
+        docs.append({
+            "id": doc["doc_id"],
+            "name": doc["name"],
+            "uploaded_at": doc["uploaded_at"],
+            "chunk_count": doc["chunk_count"],
+            "status": doc["status"],
+        })
+    return docs, total
 
 
 async def get_document(doc_id: str) -> dict | None:
@@ -77,7 +92,7 @@ async def update_status(doc_id: str, status: str) -> None:
 
 async def find_by_hash(content_hash: str, user_id: str) -> dict | None:
     db = get_db()
-    doc = await db.documents.find_one({"content_hash": content_hash, "user_id": ObjectId(user_id)})
+    doc = await db.documents.find_one({"content_hash": content_hash, "user_id": user_id})
     if not doc:
         return None
     return {"id": doc["doc_id"], "name": doc["name"]}

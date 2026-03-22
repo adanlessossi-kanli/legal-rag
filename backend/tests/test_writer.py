@@ -93,3 +93,79 @@ async def test_generate_validates_empty_question(writer):
             "chunks": _sample_chunks(),
         })
     assert exc_info.value.error_type == "VALIDATION_ERROR"
+
+
+# --- Blueprint-aware system prompt ---
+
+def test_build_system_prompt_no_blueprint(writer):
+    from app.rag.llm import SYSTEM_PROMPT
+    assert writer._build_system_prompt(None) == SYSTEM_PROMPT
+    assert writer._build_system_prompt({}) == SYSTEM_PROMPT
+    assert writer._build_system_prompt({"content": None}) == SYSTEM_PROMPT
+
+
+def test_build_system_prompt_with_scene_goal(writer):
+    bp = {"content": {"scene_goal": "Increase tension"}}
+    prompt = writer._build_system_prompt(bp)
+    assert "Increase tension" in prompt
+    assert "Goal:" in prompt
+
+
+def test_build_system_prompt_with_style_guide(writer):
+    bp = {"content": {"style_guide": "Use short sentences"}}
+    prompt = writer._build_system_prompt(bp)
+    assert "Use short sentences" in prompt
+    assert "Style guide:" in prompt
+
+
+def test_build_system_prompt_with_structure(writer):
+    bp = {"content": {"structure": ["Definition", "Impact"]}}
+    prompt = writer._build_system_prompt(bp)
+    assert "Definition, Impact" in prompt
+
+
+def test_build_system_prompt_with_participants(writer):
+    bp = {"content": {"participants": [
+        {"role": "Agent", "description": "The protagonist"},
+        {"role": "Threat", "description": "The danger"},
+    ]}}
+    prompt = writer._build_system_prompt(bp)
+    assert "Agent: The protagonist" in prompt
+    assert "Threat: The danger" in prompt
+
+
+def test_build_system_prompt_with_instruction(writer):
+    bp = {"content": {"instruction": "Rewrite the facts"}}
+    prompt = writer._build_system_prompt(bp)
+    assert "Rewrite the facts" in prompt
+
+
+def test_build_system_prompt_full_blueprint(writer):
+    from app.rag.llm import SYSTEM_PROMPT
+    bp = {"content": {
+        "scene_goal": "Explain clearly",
+        "style_guide": "Formal tone",
+        "structure": ["Intro", "Body", "Conclusion"],
+        "participants": [{"role": "Expert", "description": "Domain specialist"}],
+        "instruction": "Follow the structure",
+    }}
+    prompt = writer._build_system_prompt(bp)
+    assert prompt.startswith(SYSTEM_PROMPT)
+    assert "Explain clearly" in prompt
+    assert "Formal tone" in prompt
+    assert "Intro, Body, Conclusion" in prompt
+    assert "Expert: Domain specialist" in prompt
+    assert "Follow the structure" in prompt
+
+
+async def test_generate_with_blueprint_passes_custom_prompt(writer):
+    bp = {"content": {"scene_goal": "Be concise", "instruction": "Summarize"}}
+    with patch("app.agents.writer.generate", new_callable=AsyncMock, return_value="answer") as mock_gen:
+        await writer.call_tool("writer.generate", {
+            "question": "test",
+            "chunks": _sample_chunks(),
+            "blueprint": bp,
+        })
+    call_kwargs = mock_gen.call_args[1]
+    assert "Be concise" in call_kwargs["system_prompt"]
+    assert "Summarize" in call_kwargs["system_prompt"]

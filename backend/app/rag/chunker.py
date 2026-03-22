@@ -43,7 +43,7 @@ def _detect_legal_separators(text: str) -> list[str]:
             ". ",
             " ",
         ]
-    return None  # Use default separators
+    return None  # Use default RecursiveCharacterTextSplitter separators
 
 
 def chunk_pages(pages: list[DocumentPage], doc_id: str) -> list[Chunk]:
