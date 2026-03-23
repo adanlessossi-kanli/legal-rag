@@ -4,8 +4,14 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export interface Source {
   document: string;
+  doc_id: string;
   chunk_id: string;
   text: string;
+  page?: number;
+  page_end?: number;
+  start_char?: number;
+  end_char?: number;
+  relevance?: number;
 }
 
 export interface Message {
@@ -333,4 +339,11 @@ export async function searchDocuments(
   if (params.sortBy) query.set("sort_by", params.sortBy);
   if (params.sortOrder) query.set("sort_order", params.sortOrder);
   return request<PaginatedResponse<Document>>(`/api/documents?${query.toString()}`);
+}
+
+// --- Document file serving ---
+
+export async function getDocumentFileUrl(docId: string): Promise<string> {
+  const { url } = await request<{ url: string }>(`/api/documents/${docId}/file-token`);
+  return `${API_BASE}${url}`;
 }

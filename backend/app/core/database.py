@@ -75,8 +75,12 @@ async def connect_db() -> None:
     await _db.audit_log.create_index("user_id")
     await _db.audit_log.create_index("org_id")
     await _db.audit_log.create_index("action")
-    await _db.audit_log.create_index("created_at")
-    await _db.audit_log.create_index([("created_at", 1)], expireAfterSeconds=90 * 86400)  # 90 days
+    # TTL index — drop conflicting plain index if it exists from older versions
+    try:
+        await _db.audit_log.create_index([("created_at", 1)], expireAfterSeconds=90 * 86400, name="created_at_ttl")
+    except Exception:
+        await _db.audit_log.drop_index("created_at_1")
+        await _db.audit_log.create_index([("created_at", 1)], expireAfterSeconds=90 * 86400, name="created_at_ttl")
 
     # Feedback
     await _db.feedback.create_index("user_id")

@@ -7,13 +7,35 @@ All components use `useTranslations` from `next-intl` for user-visible text. Nav
 interface ChatMessageProps {
   role: "user" | "assistant";
   content: string;
-  sources?: { document: string; chunk_id: string; text: string }[];
+  sources?: Source[];
+  messageId?: string;
+  conversationId?: string | null;
+}
+
+interface Source {
+  document: string;
+  doc_id: string;
+  chunk_id: string;
+  text: string;
+  page?: number;
+  page_end?: number;
+  start_char?: number;
+  end_char?: number;
+  relevance?: number;
 }
 ```
 - Renders message bubble aligned left (assistant) or right (user).
 - Assistant messages render markdown via `react-markdown` + `remark-gfm`.
-- If `sources` present, render as collapsible list with ICU-pluralized toggle label.
-- Namespace: `chat` (`hideSources`, `sourceCount`).
+- If `sources` present:
+  - Group sources by `doc_id` under a document header showing name and passage count.
+  - Each source entry within a group shows page/slide label, relevance badge, and text excerpt.
+  - Page label: "Page N" for PDF/TXT/DOCX, "Slide N" for PPTX (detected from `source.document` extension).
+  - Relevance badge: percentage (e.g., "92%"), color-coded green ≥ 0.9, yellow ≥ 0.8, gray below. Hidden when `relevance` is absent.
+  - Each entry is clickable — opens `SourceViewer` modal with the source.
+  - Visual affordance: hover state with `bg-accent-light`, cursor pointer, external-link icon.
+  - Collapsible with ICU-pluralized toggle label.
+- Feedback button for assistant messages (when `messageId` is present).
+- Namespace: `chat` (`hideSources`, `sourceCount`, `viewSource`, `relevance`, `sourcesFromDocument`, `page`, `slide`).
 
 ## REQ-FC-002: ChatInput
 ```tsx
@@ -31,14 +53,15 @@ interface ChatInputProps {
 ```tsx
 interface FileDropzoneProps {
   onUpload: (files: File[]) => void;
-  accept: string[];       // e.g. [".pdf", ".txt", ".docx"]
-  maxSizeMB: number;      // e.g. 50
+  accept: string[];       // [".pdf", ".txt", ".docx", ".pptx"]
+  maxSizeMB: number;      // 50
 }
 ```
 - Drag-and-drop area with visual feedback on hover.
 - Falls back to file picker on click.
 - Validates file type and size before calling `onUpload`.
 - Uses `t.rich()` for inline rich text in dropzone label.
+- Hint text renders `accept.join(", ")` — automatically includes `.pptx`.
 - Namespace: `upload.dropzone` (`label`, `text`, `hint`, `unsupportedType`, `tooLarge`).
 
 ## REQ-FC-004: DocumentTable
@@ -95,3 +118,62 @@ interface DocumentTableProps {
 - Redirects authenticated users away from public routes to `/`.
 - Renders Sidebar + main content wrapper for protected routes.
 - No translatable text.
+
+## REQ-FC-010: AgentIndicator
+```tsx
+interface AgentIndicatorProps {
+  agent: string;   // "researcher" | "writer" | "summarizer" | "planner"
+}
+```
+- Shows active agent name with animated ping dot and SVG icon.
+- Displayed during streaming chat while agents are working.
+- Namespace: `chat` (agent name labels).
+
+## REQ-FC-011: SourceViewer
+```tsx
+interface SourceViewerProps {
+  source: Source;
+  open: boolean;
+  onClose: () => void;
+}
+```
+- Modal/overlay that opens when a source link is clicked.
+- **Viewer mode** determined by file extension of `source.document`:
+  - `.pdf` → PDF viewer mode (react-pdf).
+  - `.txt`, `.docx`, `.pptx` → Text-excerpt mode (styled code block with page/slide label).
+- **PDF viewer mode**:
+  - Opens to the specific `page` from source metadata.
+  - Highlights source text passage via `start_char` / `end_char` (best-effort, custom text renderer).
+  - Page thumbnail sidebar (scrollable, clickable, current page highlighted).
+  - Prev/Next navigation (arrow buttons + keyboard left/right). Page counter: "Page N of M".
+  - Text search input in toolbar — highlights matches across PDF, navigate with up/down arrows.
+- **Text-excerpt mode**: styled code block with "Page N" (TXT/DOCX) or "Slide N" (PPTX) label.
+- **Signed URL expiry**: if a request returns 401/403 (expired signature), silently re-fetches a new signed URL and retries. Shows error only if retry also fails.
+- **File missing from disk**: if file endpoint returns 404, shows "This document is no longer available for preview" message.
+- Close on Escape key, backdrop click, or close button.
+- Accessible: focus trap, `aria-modal`, `role="dialog"`.
+- **Mobile** (< 768px): full-screen overlay, touch-friendly controls, swipe to change pages.
+- **Lazy-loaded**: imported via `next/dynamic` with `ssr: false`. Loading spinner shown while chunk loads.
+- **Deep link**: updates URL hash to `#source=<doc_id>&page=<page>` on open, clears on close. Auto-opens on page load if hash is present.
+- Dependencies: `react-pdf`, `pdfjs-dist` (not in main bundle).
+- Namespace: `chat` (`sourceViewerTitle`, `page`, `slide`, `pageRange`, `closeViewer`, `searchInDocument`, `pageOf`, `loadingViewer`, `previousPage`, `nextPage`, `fileUnavailable`).
+
+## REQ-FC-012: FeedbackButton
+```tsx
+interface FeedbackButtonProps {
+  conversationId: string | null;
+  messageId: string;
+}
+```
+- Thumbs up/down buttons for assistant message feedback.
+- Submits rating via `POST /api/feedback`.
+- Namespace: `chat` (feedback labels).
+
+## REQ-FC-013: ExportButton
+```tsx
+interface ExportButtonProps {
+  conversationId: string | null;
+}
+```
+- Downloads conversation as markdown or JSON.
+- Namespace: `chat` (export labels).

@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useTranslations } from "next-intl";
+import dynamic from "next/dynamic";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import FeedbackButton from "@/components/FeedbackButton";
 import type { Source } from "@/lib/api";
+
+const SourceViewer = dynamic(() => import("@/components/SourceViewer"), { ssr: false });
 
 interface ChatMessageProps {
   role: "user" | "assistant";
@@ -47,10 +50,39 @@ function SourceIcon() {
   );
 }
 
+function RelevanceBadge({ relevance }: { relevance?: number }) {
+  if (relevance == null) return null;
+  const pct = Math.round(relevance * 100);
+  const color = relevance >= 0.9 ? "text-success" : relevance >= 0.8 ? "text-warning" : "text-muted";
+  return <span className={`text-[10px] font-medium ${color}`}>{pct}%</span>;
+}
+
+function isPptx(name: string) {
+  return name.toLowerCase().endsWith(".pptx");
+}
+
+function sourcePageLabel(source: Source) {
+  if (isPptx(source.document)) return `Slide ${source.page ?? "?"}`;
+  return `Page ${source.page ?? "?"}`;
+}
+
 export default function ChatMessage({ role, content, sources, messageId, conversationId }: ChatMessageProps) {
   const t = useTranslations("chat");
   const [showSources, setShowSources] = useState(false);
+  const [viewerSource, setViewerSource] = useState<Source | null>(null);
   const isUser = role === "user";
+
+  const grouped = useMemo(() => {
+    if (!sources?.length) return [];
+    const map = new Map<string, Source[]>();
+    const order: string[] = [];
+    for (const s of sources) {
+      const key = s.doc_id || s.document;
+      if (!map.has(key)) { map.set(key, []); order.push(key); }
+      map.get(key)!.push(s);
+    }
+    return order.map((key) => ({ docName: map.get(key)![0].document, sources: map.get(key)! }));
+  }, [sources]);
 
   return (
     <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : "flex-row"}`}>
@@ -72,7 +104,7 @@ export default function ChatMessage({ role, content, sources, messageId, convers
           )}
         </div>
 
-        {sources && sources.length > 0 && (
+        {grouped.length > 0 && (
           <div className="mt-2">
             <button
               onClick={() => setShowSources(!showSources)}
@@ -83,7 +115,7 @@ export default function ChatMessage({ role, content, sources, messageId, convers
                 <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
                 <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
               </svg>
-              {showSources ? t("hideSources") : t("sourceCount", { count: sources.length })}
+              {showSources ? t("hideSources") : t("sourceCount", { count: sources!.length })}
               <svg
                 width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
                 className={`transition-transform duration-200 ${showSources ? "rotate-180" : ""}`}
@@ -92,16 +124,34 @@ export default function ChatMessage({ role, content, sources, messageId, convers
               </svg>
             </button>
             {showSources && (
-              <div className="mt-2 space-y-1.5">
-                {sources.map((s) => (
-                  <div
-                    key={s.chunk_id}
-                    className="flex gap-2 text-xs p-2.5 rounded-lg bg-surface-hover border border-border"
-                  >
-                    <SourceIcon />
-                    <div className="min-w-0">
-                      <span className="font-medium text-foreground">{s.document}</span>
-                      <p className="text-muted mt-0.5 break-words">{s.text}</p>
+              <div className="mt-2 space-y-2">
+                {grouped.map((group) => (
+                  <div key={group.docName} className="rounded-lg border border-border bg-surface-hover p-2">
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-foreground mb-1.5">
+                      <SourceIcon />
+                      <span className="truncate">{group.docName}</span>
+                      <span className="text-muted">({group.sources.length})</span>
+                    </div>
+                    <div className="space-y-1">
+                      {group.sources.map((s) => (
+                        <button
+                          key={s.chunk_id}
+                          onClick={() => setViewerSource(s)}
+                          className="w-full text-left flex items-start gap-2 text-xs p-2 rounded-md hover:bg-accent-light transition-colors cursor-pointer group"
+                          title={t("viewSource")}
+                        >
+                          <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
+                            <span className="text-accent font-medium">{sourcePageLabel(s)}</span>
+                            <RelevanceBadge relevance={s.relevance} />
+                          </div>
+                          <p className="text-muted min-w-0 break-words flex-1">{s.text}</p>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity text-muted">
+                            <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+                            <polyline points="15 3 21 3 21 9" />
+                            <line x1="10" y1="14" x2="21" y2="3" />
+                          </svg>
+                        </button>
+                      ))}
                     </div>
                   </div>
                 ))}
@@ -114,6 +164,10 @@ export default function ChatMessage({ role, content, sources, messageId, convers
           <FeedbackButton conversationId={conversationId || null} messageId={messageId} />
         )}
       </div>
+
+      {viewerSource && (
+        <SourceViewer source={viewerSource} open={true} onClose={() => setViewerSource(null)} />
+      )}
     </div>
   );
 }

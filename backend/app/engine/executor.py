@@ -180,14 +180,22 @@ class Executor:
         return None
 
     def _build_sources(self, chunks: list[dict]) -> list[Source]:
-        return [
+        from app.rag.sources import deduplicate_sources
+        sources = [
             Source(
                 document=c["metadata"].get("source", "unknown"),
+                doc_id=c["metadata"].get("doc_id", ""),
                 chunk_id=c["chunk_id"],
                 text=c["text"][:settings.source_text_max_length],
+                page=c["metadata"].get("page_start") or c["metadata"].get("page"),
+                page_end=c["metadata"].get("page_end"),
+                start_char=c["metadata"].get("start_char"),
+                end_char=c["metadata"].get("end_char"),
+                relevance=c.get("score"),
             )
             for c in chunks
         ]
+        return deduplicate_sources(sources)
 
 
 def _summarize(result: dict) -> str:

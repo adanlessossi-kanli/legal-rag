@@ -56,6 +56,16 @@ def create_refresh_token(user_id: str) -> tuple[str, str]:
     return token, jti
 
 
+async def get_optional_user(token: str | None = Depends(oauth2_scheme)) -> dict | None:
+    """Return user if a valid Bearer token is present, else None (no 401)."""
+    if token is None:
+        return None
+    try:
+        return await get_current_user(token)
+    except HTTPException:
+        return None
+
+
 async def get_current_user(token: str | None = Depends(oauth2_scheme)) -> dict:
     if token is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")

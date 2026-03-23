@@ -1,28 +1,43 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
+import { useRouter } from "@/i18n/navigation";
 import FileDropzone from "@/components/FileDropzone";
 import { uploadDocument, type UploadResponse } from "@/lib/api";
 
 export default function UploadPage() {
   const t = useTranslations("upload");
+  const router = useRouter();
   const [uploading, setUploading] = useState(false);
   const [results, setResults] = useState<UploadResponse[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
 
   const handleUpload = async (files: File[]) => {
     setUploading(true);
     setErrors([]);
+    setResults([]);
     const settled = await Promise.allSettled(files.map(uploadDocument));
+    let hasSuccess = false;
     for (const result of settled) {
       if (result.status === "fulfilled") {
         setResults((prev) => [...prev, result.value]);
+        hasSuccess = true;
       } else {
         setErrors((prev) => [...prev, result.reason?.message || t("failed")]);
       }
     }
     setUploading(false);
+    if (hasSuccess) {
+      timerRef.current = setTimeout(() => router.push("/documents"), 500);
+    }
   };
 
   return (
@@ -32,7 +47,7 @@ export default function UploadPage() {
         <p className="text-xs text-muted mt-0.5">{t("subtitle")}</p>
       </div>
 
-      <FileDropzone onUpload={handleUpload} accept={[".pdf", ".txt", ".docx"]} maxSizeMB={50} />
+      <FileDropzone onUpload={handleUpload} accept={[".pdf", ".txt", ".docx", ".pptx"]} maxSizeMB={50} />
 
       {uploading && (
         <div className="mt-4 flex items-center gap-2 text-sm text-muted">

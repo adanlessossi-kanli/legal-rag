@@ -61,12 +61,28 @@ def chunk_pages(pages: list[DocumentPage], doc_id: str) -> list[Chunk]:
     splitter = RecursiveCharacterTextSplitter(**splitter_kwargs)
     chunks: list[Chunk] = []
     for page in pages:
-        splits = splitter.split_text(page.text)
-        for text in splits:
+        page_num = page.metadata.get("page", 1)
+        docs = splitter.create_documents([page.text], metadatas=[page.metadata])
+        search_start = 0
+        for doc in docs:
+            text = doc.page_content
+            start_char = page.text.find(text, search_start)
+            if start_char == -1:
+                start_char = page.text.find(text)
+            end_char = start_char + len(text) if start_char >= 0 else -1
+            if start_char >= 0:
+                search_start = start_char + 1
             chunks.append(Chunk(
                 chunk_id=str(uuid.uuid4()),
                 text=text,
-                metadata={**page.metadata, "doc_id": doc_id},
+                metadata={
+                    **page.metadata,
+                    "doc_id": doc_id,
+                    "page_start": page_num,
+                    "page_end": page_num,
+                    "start_char": max(start_char, 0),
+                    "end_char": max(end_char, 0),
+                },
             ))
     logger.info("Chunked doc %s into %d chunks", doc_id, len(chunks))
     return chunks

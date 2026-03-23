@@ -79,6 +79,9 @@ class Settings(BaseSettings):
     mongodb_db: str = "legal_rag"
     mongodb_options: str = ""
 
+    # File serving
+    file_token_expiry_seconds: int = 300
+
     # JWT
     jwt_secret: str
     jwt_algorithm: str = "HS256"

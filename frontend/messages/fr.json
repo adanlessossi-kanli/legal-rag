@@ -68,6 +68,20 @@
     },
     "hideSources": "Masquer les sources",
     "sourceCount": "{count, plural, one {1 source} other {# sources}}",
+    "viewSource": "Voir la source",
+    "sourceViewerTitle": "Source : {document}",
+    "page": "Page {page}",
+    "slide": "Diapositive {page}",
+    "pageRange": "Pages {start}–{end}",
+    "closeViewer": "Fermer",
+    "relevance": "{score}% de correspondance",
+    "sourcesFromDocument": "{count} sources de {document}",
+    "searchInDocument": "Rechercher dans le document…",
+    "pageOf": "Page {current} sur {total}",
+    "loadingViewer": "Chargement du document…",
+    "previousPage": "Page précédente",
+    "nextPage": "Page suivante",
+    "fileUnavailable": "Ce document n'est plus disponible pour l'aperçu",
     "agents": {
       "researcher": "Recherche en cours",
       "writer": "Rédaction en cours",
@@ -83,6 +97,7 @@
       "chunks": "{count} fragments"
     },
     "failed": "Échec du téléversement",
+    "redirecting": "Redirection vers les documents…",
     "dropzone": {
       "label": "Téléversez des fichiers en les déposant ou en cliquant",
       "text": "Déposez les fichiers ici ou <browse>parcourir</browse>",

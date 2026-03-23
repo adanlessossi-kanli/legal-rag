@@ -41,6 +41,7 @@ A retrieval-augmented generation application for legal documents. Upload contrac
 | Cache      | Redis (query response caching)                    |
 | LLM        | OpenAI GPT-4o                                     |
 | Embeddings | OpenAI text-embedding-3-small                     |
+| PPTX       | python-pptx                                       |
 | Monitoring | Prometheus (prometheus-client)                    |
 
 ## Getting Started
@@ -274,7 +275,7 @@ pytest tests/ -m "not integration" -v
 
 Test modules:
 - `test_chunker.py` — chunk count, overlap, size limits
-- `test_loader.py` — PDF, TXT, DOCX text extraction
+- `test_loader.py` — PDF, TXT, DOCX, PPTX text extraction
 - `test_metadata.py` — document metadata CRUD round-trips
 - `test_api.py` — validation, health checks, request ID middleware
 - `test_auth.py` — register, login, refresh token rotation, JWT
@@ -294,6 +295,7 @@ Test modules:
 - `test_tracer.py` — execution trace: step lifecycle, finalize, serialization
 - `test_seed.py` — default blueprint seeding, idempotency
 - `test_blueprints_api.py` — blueprint CRUD, auth, default protection, validation
+- `test_sources.py` — source deduplication, merging, relevance ordering
 - `test_integration.py` — real MongoDB `$vectorSearch` end-to-end (requires Docker)
 
 ## Configuration
@@ -351,6 +353,7 @@ All backend config is via environment variables (set in `backend/.env`):
 | `PLANNER_MODEL` | `gpt-4o`                 | Model for plan generation        |
 | `PLANNER_TIMEOUT` | `15`                   | Planner LLM timeout (seconds)    |
 | `DEFAULT_NAMESPACE` | `KnowledgeStore`     | Default vector namespace         |
+| `FILE_TOKEN_EXPIRY_SECONDS` | `300`   | Signed file URL TTL (5 minutes)          |
 
 Frontend config (set in `frontend/.env.local`):
 
@@ -369,7 +372,9 @@ Frontend config (set in `frontend/.env.local`):
 | `POST`   | `/api/auth/logout`          | Yes  | Revoke all sessions                  |
 | `GET`    | `/api/auth/me`              | Yes  | Get current user info                |
 | `POST`   | `/api/chat`                 | Yes  | Ask a question (`?stream=true` for SSE) |
-| `POST`   | `/api/upload`               | Yes  | Upload a PDF, TXT, or DOCX document |
+| `POST`   | `/api/upload`               | Yes  | Upload a PDF, TXT, DOCX, or PPTX document |
+| `GET`    | `/api/documents/{id}/file`  | Yes* | Serve original uploaded file (signed URL)  |
+| `GET`    | `/api/documents/{id}/file-token` | Yes | Generate short-lived signed URL for file |
 | `GET`    | `/api/documents`            | Yes  | List user/org documents (paginated)  |
 | `GET`    | `/api/documents/{id}/status`| Yes  | Get document processing status       |
 | `DELETE` | `/api/documents/{id}`       | Yes  | Delete a document and its chunks     |
@@ -486,7 +491,7 @@ data: {"type": "done"}
 
 ### POST /api/upload
 
-Send as `multipart/form-data` with a `file` field. Accepts `.pdf`, `.txt`, `.docx` (max 50MB).
+Send as `multipart/form-data` with a `file` field. Accepts `.pdf`, `.txt`, `.docx`, `.pptx` (max 50MB).
 Ingestion runs in the background — the response returns immediately with `status: "processing"`.
 
 ```json
@@ -528,7 +533,7 @@ legal-rag/
 │   │   │   ├── auth.py     #   register, login, refresh, logout, me
 │   │   │   ├── chat.py     #   chat with conversation persistence + caching
 │   │   │   ├── conversations.py  # list, get, delete conversations
-│   │   │   ├── documents.py#   list, status, delete documents (org/user-scoped)
+│   │   │   ├── documents.py#   list, status, delete, file serving (org/user-scoped)
 │   │   │   ├── health.py   #   health check (incl. agent + Redis health)
 │   │   │   ├── metrics.py  #   Prometheus scrape + usage endpoints
 │   │   │   ├── organizations.py # org CRUD + member management
@@ -556,10 +561,11 @@ legal-rag/
 │   │   ├── models/
 │   │   │   └── schemas.py  #   Pydantic schemas (auth, chat, docs, conversations, blueprints)
 │   │   └── rag/            # RAG pipeline
-│   │       ├── chunker.py  #   Text splitting
+│   │       ├── chunker.py  #   Text splitting with offset tracking
 │   │       ├── llm.py      #   OpenAI generation + query rewriting
-│   │       ├── loader.py   #   PDF/TXT/DOCX text extraction
+│   │       ├── loader.py   #   PDF/TXT/DOCX/PPTX text extraction
 │   │       ├── pipeline.py #   Thin facade delegating to orchestrator
+│   │       ├── sources.py  #   Source deduplication + merging
 │   │       └── vectorstore.py  # Hybrid search (vector + keyword + RRF + rerank)
 │   ├── tests/
 │   │   ├── conftest.py     #   Fixtures: mock MongoDB, auth helpers
@@ -610,13 +616,14 @@ legal-rag/
 │       │   ├── AgentIndicator.tsx # Active agent status with animated dot
 │       │   ├── AuthGuard.tsx     # Auth redirect + sidebar layout
 │       │   ├── ChatInput.tsx     # Auto-resizing textarea + send
-│       │   ├── ChatMessage.tsx   # Message bubbles with sources
+│       │   ├── ChatMessage.tsx   # Message bubbles with grouped sources
 │       │   ├── DocumentTable.tsx # Document list table
 │       │   ├── ErrorBoundary.tsx # Error fallback UI
-│       │   ├── FileDropzone.tsx  # Drag-and-drop upload
+│       │   ├── FileDropzone.tsx  # Drag-and-drop upload (PDF/TXT/DOCX/PPTX)
 │       │   ├── LanguageSwitcher.tsx # Locale dropdown selector
 │       │   ├── LoadingIndicator.tsx # Typing dots animation
-│       │   └── Sidebar.tsx       # Nav, conversations, language switcher, user info
+│       │   ├── Sidebar.tsx       # Nav, conversations, language switcher, user info
+│       │   └── SourceViewer.tsx  # PDF viewer modal + text-excerpt mode (lazy-loaded)
 │       ├── i18n/                 # Internationalization config
 │       │   ├── config.ts         #   Supported locales + default
 │       │   ├── navigation.ts     #   Localized Link, useRouter, usePathname
@@ -667,7 +674,7 @@ Users can create custom blueprints via the API. The Planner's `intent_query` is 
 
 ## RAG Pipeline
 
-1. **Load** — Extract text from PDF (PyMuPDF), TXT, or DOCX (python-docx) files, preserving page numbers.
+1. **Load** — Extract text from PDF (PyMuPDF), TXT, DOCX (python-docx), or PPTX (python-pptx) files, preserving page/slide numbers.
 2. **Chunk** — Split into ~1000-character chunks with 200-character overlap using recursive character splitting.
 3. **Embed** — Generate vectors via OpenAI `text-embedding-3-small`.
 4. **Store** — Persist chunks + embeddings in MongoDB Atlas (`chunks` collection).
@@ -694,7 +701,9 @@ Users can create custom blueprints via the API. The Planner's `intent_query` is 
 - **WebSocket ingestion notifications** — Real-time document processing status via WebSocket (`/api/ws/ingestion`), replacing client-side polling.
 - **Multi-tenancy** — Organization-level data isolation. Create organizations, invite members, and share documents across the team. Vector search is scoped to `org_id` when the user belongs to an organization.
 - **DOCX support** — Upload Word documents alongside PDF and TXT.
-- **File validation** — Client-side and server-side type/size checks, filename sanitization, duplicate detection per user.
+- **PPTX support** — Upload PowerPoint presentations. Extracts text from text frames, tables, and grouped shapes per slide. Speaker notes excluded (future enhancement).
+- **Source viewer** — Clickable source citations open the original PDF in an in-app viewer at the relevant page with text highlighting. Sources are grouped by document with relevance scores. Signed URLs for secure file access. Non-PDF sources show text excerpts.
+- **File validation** — Client-side and server-side type/size checks (PDF, TXT, DOCX, PPTX), filename sanitization, duplicate detection per user.
 - **Responsive UI** — Sidebar collapses on mobile, dark mode support, accessible navigation.
 - **Security** — JWT auth, bcrypt password hashing (SHA-256 pre-hash), refresh token rotation, rate limiting, input length limits, org/user-scoped data isolation, account lockout after failed logins, Content-Security-Policy headers, path traversal prevention.
 - **Observability** — Structured JSON logging, request ID tracing, deep health checks (MongoDB + OpenAI + Redis + agents), per-agent tool call timing. Prometheus metrics endpoint (`/api/metrics`) for HTTP latency, OpenAI token usage, error rates, and retrieval performance.

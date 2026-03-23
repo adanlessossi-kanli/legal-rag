@@ -24,6 +24,8 @@ def load_document(file_path: str) -> list[DocumentPage]:
         return _load_txt(path, name)
     if ext == ".docx":
         return _load_docx(path, name)
+    if ext == ".pptx":
+        return _load_pptx(path, name)
     raise ValueError(f"Unsupported file type: {ext}")
 
 
@@ -77,4 +79,32 @@ def _load_docx(path: Path, name: str) -> list[DocumentPage]:
         ))
 
     logger.info("Loaded DOCX %s: %d pages", name, len(pages))
+    return pages
+
+
+def _extract_slide_texts(shapes) -> list[str]:
+    texts = []
+    for shape in shapes:
+        if shape.has_text_frame:
+            texts.append(shape.text_frame.text)
+        if shape.has_table:
+            for row in shape.table.rows:
+                for cell in row.cells:
+                    texts.append(cell.text)
+        if hasattr(shape, "shapes"):
+            texts.extend(_extract_slide_texts(shape.shapes))
+    return texts
+
+
+def _load_pptx(path: Path, name: str) -> list[DocumentPage]:
+    from pptx import Presentation
+
+    prs = Presentation(str(path))
+    pages: list[DocumentPage] = []
+    for i, slide in enumerate(prs.slides):
+        texts = _extract_slide_texts(slide.shapes)
+        text = "\n".join(t for t in texts if t.strip())
+        if text.strip():
+            pages.append(DocumentPage(text=text, metadata={"source": name, "page": i + 1}))
+    logger.info("Loaded PPTX %s: %d slides", name, len(pages))
     return pages

@@ -68,6 +68,20 @@
     },
     "hideSources": "Hide sources",
     "sourceCount": "{count, plural, one {1 source} other {# sources}}",
+    "viewSource": "View source",
+    "sourceViewerTitle": "Source: {document}",
+    "page": "Page {page}",
+    "slide": "Slide {page}",
+    "pageRange": "Pages {start}–{end}",
+    "closeViewer": "Close",
+    "relevance": "{score}% match",
+    "sourcesFromDocument": "{count} sources from {document}",
+    "searchInDocument": "Search in document…",
+    "pageOf": "Page {current} of {total}",
+    "loadingViewer": "Loading document…",
+    "previousPage": "Previous page",
+    "nextPage": "Next page",
+    "fileUnavailable": "This document is no longer available for preview",
     "agents": {
       "researcher": "Researching",
       "writer": "Writing",
@@ -83,6 +97,7 @@
       "chunks": "{count} chunks"
     },
     "failed": "Upload failed",
+    "redirecting": "Redirecting to documents…",
     "dropzone": {
       "label": "Upload files by dropping or clicking",
       "text": "Drop files here or <browse>browse</browse>",
